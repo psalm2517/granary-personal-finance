@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/repository.dart';
 import '../main.dart';
 import '../util/money.dart';
 import '../widgets/common.dart';
+import 'accounts.dart' show accountIcon, accountTypeColor;
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -18,6 +20,21 @@ String freqLabel(BillFrequency f) => switch (f) {
       BillFrequency.annual => 'Annual',
       BillFrequency.oneTime => 'One-time',
     };
+
+/// The name of the account or card a bill is paid from, or null if it
+/// has no payment source set (or that source has since been deleted).
+String? _sourceLabel(
+    Bill b, List<Account> accounts, List<CreditCard> cards) {
+  if (b.paymentSourceType == null || b.paymentSourceId == null) return null;
+  return switch (b.paymentSourceType!) {
+    PaymentSourceType.account => accounts
+        .where((a) => a.id == b.paymentSourceId)
+        .firstOrNull
+        ?.name,
+    PaymentSourceType.card =>
+      cards.where((c) => c.id == b.paymentSourceId).firstOrNull?.name,
+  };
+}
 
 IconData freqIcon(BillFrequency f) => switch (f) {
       BillFrequency.monthly => Icons.repeat,
@@ -73,7 +90,25 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Add bill'),
       ),
-      body: StreamBuilder<List<({Bill bill, bool paid})>>(
+      body: StreamBuilder<List<Account>>(
+        stream: repo.watchAccounts(profileId: profileId),
+        builder: (context, accountsSnap) {
+          final accounts = accountsSnap.data ?? [];
+          return StreamBuilder<List<CreditCard>>(
+            stream: repo.watchCards(profileId: profileId),
+            builder: (context, cardsSnap) {
+              final cards = cardsSnap.data ?? [];
+              return _body(context, repo, profileId, scheme, accounts, cards);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context, HomebaseRepository repo, int profileId,
+      ColorScheme scheme, List<Account> accounts, List<CreditCard> cards) {
+    return StreamBuilder<List<({Bill bill, bool paid})>>(
         stream:
             repo.watchBillsForMonth(profileId: profileId, month: _month),
         builder: (context, snap) {
@@ -176,15 +211,13 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                           ],
                         )),
                     for (final row in rows)
-                      _billTile(context, row, today, scheme),
+                      _billTile(context, row, today, scheme, accounts, cards),
                   ],
                 ),
               ),
             ],
           );
-        },
-      ),
-    );
+        });
   }
 
   Widget _monthBar(BuildContext context, {required int unpaidCount}) {
@@ -241,7 +274,8 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
   }
 
   Widget _billTile(BuildContext context, ({Bill bill, bool paid}) row,
-      DateTime today, ColorScheme scheme) {
+      DateTime today, ColorScheme scheme, List<Account> accounts,
+      List<CreditCard> cards) {
     final b = row.bill;
     final lastDay = DateTime(_month.year, _month.month + 1, 0).day;
     final dueDate = DateTime(
@@ -252,6 +286,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
         _month.month == today.month &&
         dueDate.isBefore(DateTime(today.year, today.month, today.day));
     final profileId = ref.read(activeProfileProvider)!.id;
+    final sourceLabel = _sourceLabel(b, accounts, cards);
 
     return Card(
       child: CheckboxListTile(
@@ -280,12 +315,16 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                 size: 14,
                 color: overdue ? scheme.error : null),
             const SizedBox(width: 4),
-            Text(
-              'Due the ${ordinalDay(dueDate.day)} of '
-              '${_monthNames[dueDate.month - 1]}'
-              '${overdue ? ' • overdue' : ''} • ${b.category}'
-              ' • ${freqLabel(b.frequency)}',
-              style: TextStyle(color: overdue ? scheme.error : null),
+            Flexible(
+              child: Text(
+                'Due the ${ordinalDay(dueDate.day)} of '
+                '${_monthNames[dueDate.month - 1]}'
+                '${overdue ? ' • overdue' : ''} • ${b.category}'
+                ' • ${freqLabel(b.frequency)}'
+                '${sourceLabel == null ? '' : ' • $sourceLabel'}',
+                style: TextStyle(color: overdue ? scheme.error : null),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -347,6 +386,23 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
     var dueMonth = existing?.dueMonth ?? _month.month;
     var dueYear = existing?.dueYear ?? _month.year;
     var autopay = existing?.autopay ?? false;
+    final repo = ref.read(repositoryProvider);
+    // Retirement and investment accounts aren't something you'd pay a bill
+    // from — left out of the picker, unless a bill already uses one, so
+    // editing it doesn't strand the dropdown on a value with no matching
+    // item.
+    final accounts = (await repo.watchAccounts(profileId: profileId).first)
+        .where((a) =>
+            HomebaseRepository.cashAccountTypes.contains(a.type) ||
+            (existing?.paymentSourceType == PaymentSourceType.account &&
+                a.id == existing?.paymentSourceId))
+        .toList();
+    final cards = await repo.watchCards(profileId: profileId).first;
+    // Encoded as "account:3" or "card:2" so one dropdown can offer both.
+    String? source = existing?.paymentSourceType == null
+        ? null
+        : '${existing!.paymentSourceType!.name}:${existing.paymentSourceId}';
+    if (!context.mounted) return;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -446,6 +502,44 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
                   value: autopay,
                   onChanged: (v) => setLocal(() => autopay = v),
                 ),
+                if (accounts.isNotEmpty || cards.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: source,
+                    decoration: const InputDecoration(
+                        labelText: 'Paid from (optional)',
+                        helperText: 'Marking this bill paid will move the '
+                            'amount off an account\'s balance, or onto a '
+                            'card\'s',
+                        helperMaxLines: 2,
+                        border: OutlineInputBorder()),
+                    items: [
+                      const DropdownMenuItem(
+                          value: null, child: Text('Not linked')),
+                      for (final a in accounts)
+                        DropdownMenuItem(
+                          value: 'account:${a.id}',
+                          child: Row(children: [
+                            Icon(accountIcon(a.type),
+                                size: 16,
+                                color: accountTypeColor(context, a.type)),
+                            const SizedBox(width: 8),
+                            Text(a.name),
+                          ]),
+                        ),
+                      for (final c in cards)
+                        DropdownMenuItem(
+                          value: 'card:${c.id}',
+                          child: Row(children: [
+                            const Icon(Icons.credit_card, size: 16),
+                            const SizedBox(width: 8),
+                            Text(c.name),
+                          ]),
+                        ),
+                    ],
+                    onChanged: (v) => setLocal(() => source = v),
+                  ),
+                ],
               ]),
             ),
           ),
@@ -467,6 +561,7 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
       if (mounted) warnNotSaved(context, 'the bill needs a name');
       return;
     }
+    final sourceParts = source?.split(':');
     await ref.read(repositoryProvider).upsertBill(BillsCompanion(
           id: existing == null ? const Value.absent() : Value(existing.id),
           profileId: Value(profileId),
@@ -481,6 +576,11 @@ class _BillsScreenState extends ConsumerState<BillsScreen> {
           dueYear:
               Value(frequency == BillFrequency.oneTime ? dueYear : null),
           autopay: Value(autopay),
+          paymentSourceType: Value(sourceParts == null
+              ? null
+              : PaymentSourceType.values.byName(sourceParts[0])),
+          paymentSourceId: Value(
+              sourceParts == null ? null : int.parse(sourceParts[1])),
         ));
   }
 }

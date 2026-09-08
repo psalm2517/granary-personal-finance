@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
+import '../data/repository.dart';
 import '../main.dart';
 import '../util/money.dart';
 import '../widgets/common.dart';
+import '../widgets/sankey_chart.dart';
 import 'accounts.dart';
 
 const _monthNames = [
@@ -25,6 +27,7 @@ class BudgetScreen extends ConsumerStatefulWidget {
 
 class _BudgetScreenState extends ConsumerState<BudgetScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  String? _tagFilter;
 
   bool get _isCurrentMonth {
     final now = DateTime.now();
@@ -54,6 +57,8 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
           repo.watchCardFeesDueThisMonthCents(profileId: profileId),
           repo.watchReserveForIrregularBillsCents(profileId: profileId),
           repo.watchReserveForCardFeesCents(profileId: profileId),
+          repo.watchEntryTagNames(profileId: profileId),
+          repo.watchSplitsByEntry(profileId: profileId),
         ]),
         builder: (context, snap) {
           if (!snap.hasData) return const SizedBox.shrink();
@@ -62,8 +67,11 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
           final expectedIncome = snap.data![2] as int;
           final billsDue = (snap.data![3] as int) + (snap.data![4] as int);
           final setAside = (snap.data![5] as int) + (snap.data![6] as int);
+          final tagsByEntry = snap.data![7] as Map<int, List<String>>;
+          final splitsByEntry =
+              snap.data![8] as Map<int, List<TransactionSplit>>;
           return _body(context, entries, targets, expectedIncome, billsDue,
-              setAside, scheme);
+              setAside, tagsByEntry, splitsByEntry, scheme);
         },
       ),
     );
@@ -76,6 +84,8 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
       int expectedIncomeCents,
       int billsDueCents,
       int setAsideCents,
+      Map<int, List<String>> tagsByEntry,
+      Map<int, List<TransactionSplit>> splitsByEntry,
       ColorScheme scheme) {
     final moneyIn = entries
         .where((e) => e.type == EntryType.income)
@@ -90,10 +100,15 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
         targets.fold(0, (sum, t) => sum + t.monthlyTargetCents);
     final unallocated = expectedIncomeCents - billsDueCents - targetsTotal;
 
+    // A split entry counts under each of its own categories here, not once
+    // under its parent's fallback category.
+    final categoryRows =
+        HomebaseRepository.expandForCategoryTotals(entries, splitsByEntry);
     final spentByCategory = <String, int>{};
-    for (final e in entries.where((e) => e.type == EntryType.expense)) {
-      spentByCategory[e.category] =
-          (spentByCategory[e.category] ?? 0) + e.amountCents;
+    final incomeByCategory = <String, int>{};
+    for (final r in categoryRows) {
+      final map = r.type == EntryType.expense ? spentByCategory : incomeByCategory;
+      map[r.category] = (map[r.category] ?? 0) + r.amountCents;
     }
     final categories = {
       ...spentByCategory.keys,
@@ -101,6 +116,14 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
     }.toList()
       ..sort((a, b) =>
           (spentByCategory[b] ?? 0).compareTo(spentByCategory[a] ?? 0));
+
+    final allTags = tagsByEntry.values.expand((t) => t).toSet().toList()
+      ..sort();
+    final visibleEntries = _tagFilter == null
+        ? entries
+        : entries
+            .where((e) => (tagsByEntry[e.id] ?? []).contains(_tagFilter))
+            .toList();
 
     return Column(
       children: [
@@ -239,6 +262,37 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                   ),
                 ),
               ),
+              if (moneyIn > 0 || moneyOut > 0) ...[
+                kSectionGap,
+                SectionHeader('Cash flow',
+                    icon: Icons.alt_route,
+                    info: const InfoButton(
+                      title: 'Cash flow',
+                      body: [
+                        'Where this month\'s money came from on the left, '
+                            'and where it went on the right — income sources '
+                            'flow into a single total, which then splits '
+                            'across spending categories.',
+                        'Whatever is left over flows out as Savings. If '
+                            'spending exceeds income this month, Savings '
+                            'drops out and the categories on the right simply '
+                            'add up to more than what came in.',
+                      ],
+                    )),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      height: 320,
+                      child: IncomeSankeyChart(
+                        incomeByCategory: incomeByCategory,
+                        expenseByCategory: spentByCategory,
+                        leftoverCents: moneyIn - moneyOut,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               kSectionGap,
               SectionHeader('Where it went',
                   icon: Icons.donut_small_outlined,
@@ -282,7 +336,23 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
               kSectionGap,
               const SectionHeader('Everything this month',
                   icon: Icons.list_alt_outlined),
-              if (entries.isEmpty)
+              if (allTags.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final tag in allTags)
+                        ChoiceChip(
+                          label: Text(tag),
+                          selected: _tagFilter == tag,
+                          onSelected: (selected) => setState(
+                              () => _tagFilter = selected ? tag : null),
+                        ),
+                    ],
+                  ),
+                ),
+              if (visibleEntries.isEmpty)
                 const Card(
                   child: Padding(
                     padding: EdgeInsets.all(24),
@@ -299,7 +369,9 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                 Card(
                   child: Column(
                     children: [
-                      for (final e in entries) _entryTile(context, e, scheme),
+                      for (final e in visibleEntries)
+                        _entryTile(context, e, tagsByEntry[e.id] ?? [],
+                            splitsByEntry[e.id] ?? [], scheme),
                     ],
                   ),
                 ),
@@ -355,13 +427,101 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
               icon: const Icon(Icons.rule, size: 18),
               label: const Text('Auto-categorize'),
             ),
+            const SizedBox(width: 4),
+            TextButton.icon(
+              onPressed: () => _manageTags(context),
+              icon: const Icon(Icons.label_outline, size: 18),
+              label: const Text('Tags'),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _entryTile(BuildContext context, BudgetEntry e, ColorScheme scheme) {
+  /// A misspelled or abandoned tag has no other way to go away — it can
+  /// only ever be created by typing it into an entry, never browsed or
+  /// removed from anywhere else.
+  Future<void> _manageTags(BuildContext context) async {
+    final repo = ref.read(repositoryProvider);
+    final profileId = ref.read(activeProfileProvider)!.id;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tags'),
+        content: SizedBox(
+          width: 360,
+          child: StreamBuilder<List<Tag>>(
+            stream: repo.watchTags(profileId: profileId),
+            builder: (context, snap) {
+              final tags = snap.data ?? [];
+              if (tags.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: EmptyState(
+                    icon: Icons.label_outline,
+                    title: 'No tags yet',
+                    message: 'Add one by typing it into an entry\'s Tags '
+                        'field when you add it.',
+                  ),
+                );
+              }
+              return SizedBox(
+                height: 320,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final t in tags)
+                      ListTile(
+                        leading: CategoryDot(t.name),
+                        title: Text(t.name),
+                        trailing: IconButton(
+                          tooltip: 'Delete tag',
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          onPressed: () async {
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: Text('Delete "${t.name}"?'),
+                                content: const Text(
+                                    'Removed from every entry it was on. '
+                                    'The entries themselves are unaffected.'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: const Text('Cancel')),
+                                  DangerButton(
+                                      label: 'Delete',
+                                      onPressed: () =>
+                                          Navigator.pop(context, true)),
+                                ],
+                              ),
+                            );
+                            if (ok == true) {
+                              await repo.deleteTag(
+                                  profileId: profileId, id: t.id);
+                            }
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Widget _entryTile(BuildContext context, BudgetEntry e, List<String> tags,
+      List<TransactionSplit> splits, ColorScheme scheme) {
     final automatic = e.sourcePaycheckId != null || e.sourceBillPaymentId != null;
     return ListTile(
       leading: Icon(
@@ -374,9 +534,41 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                       : Icons.arrow_upward,
           color: e.type == EntryType.income ? scheme.primary : scheme.error),
       title: Text(e.description ?? e.category),
-      subtitle: Text('${e.category} • '
-          '${_monthNames[e.date.month - 1].substring(0, 3)} ${e.date.day}'
-          '${automatic ? ' • added automatically' : ''}'),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('${splits.isEmpty ? e.category : 'Split'}'
+              '${e.payee != null ? ' • ${e.payee}' : ''} • '
+              '${_monthNames[e.date.month - 1].substring(0, 3)} ${e.date.day}'
+              '${automatic ? ' • added automatically' : ''}'),
+          if (splits.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (final s in splits)
+                    Pill('${s.category} ${fmtCents(s.amountCents)}',
+                        color: categoryColor(context, s.category),
+                        fontSize: 11),
+                ],
+              ),
+            ),
+          if (tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 6,
+                children: [
+                  for (final tag in tags)
+                    Pill(tag, color: categoryColor(context, tag), fontSize: 11),
+                ],
+              ),
+            ),
+        ],
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -429,6 +621,8 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
       int? targetCents, ColorScheme scheme) {
     final over = targetCents != null && spentCents > targetCents;
     return ListTile(
+      leading: SizedBox(
+          width: 24, height: 24, child: Center(child: CategoryDot(category))),
       title: Text(category),
       subtitle: targetCents == null
           ? null
@@ -531,10 +725,18 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
     final description = TextEditingController();
     final amount = TextEditingController();
     final category = TextEditingController();
+    final payee = TextEditingController();
+    final tags = TextEditingController();
     var type = EntryType.expense;
     var autoCategorized = false;
-    int? accountId;
-    final accounts = await repo.watchAccounts(profileId: profileId).first;
+    // Encoded as "account:3" or "card:2" so one dropdown can offer both.
+    String? source;
+    var splitMode = false;
+    final splitRows = <({TextEditingController category, TextEditingController amount})>[];
+    final accounts = (await repo.watchAccounts(profileId: profileId).first)
+        .where((a) => HomebaseRepository.cashAccountTypes.contains(a.type))
+        .toList();
+    final cards = await repo.watchCards(profileId: profileId).first;
     if (!context.mounted) return;
 
     final saved = await showDialog<bool>(
@@ -580,40 +782,151 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
               TextField(
                   controller: amount,
                   onSubmitted: (_) => Navigator.pop(context, true),
+                  onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                       labelText: 'Amount (\$)',
                       border: OutlineInputBorder())),
               const SizedBox(height: 12),
+              if (!splitMode)
+                TextField(
+                    controller: category,
+                    onSubmitted: (_) => Navigator.pop(context, true),
+                    onChanged: (_) => autoCategorized = false,
+                    decoration: InputDecoration(
+                        labelText: 'Category',
+                        helperText: autoCategorized
+                            ? 'Auto-categorized by rule'
+                            : null,
+                        border: const OutlineInputBorder())),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Split into categories'),
+                subtitle: const Text(
+                    'Break this amount across more than one category'),
+                value: splitMode,
+                onChanged: (v) => setState(() {
+                  splitMode = v;
+                  if (v && splitRows.isEmpty) {
+                    splitRows.addAll([
+                      (
+                        category: TextEditingController(),
+                        amount: TextEditingController()
+                      ),
+                      (
+                        category: TextEditingController(),
+                        amount: TextEditingController()
+                      ),
+                    ]);
+                  }
+                }),
+              ),
+              if (splitMode) ...[
+                for (var i = 0; i < splitRows.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          controller: splitRows[i].category,
+                          decoration: const InputDecoration(
+                              labelText: 'Category',
+                              isDense: true,
+                              border: OutlineInputBorder()),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: splitRows[i].amount,
+                          onChanged: (_) => setState(() {}),
+                          decoration: const InputDecoration(
+                              labelText: '\$',
+                              isDense: true,
+                              border: OutlineInputBorder()),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline, size: 18),
+                        onPressed: splitRows.length <= 1
+                            ? null
+                            : () => setState(() => splitRows.removeAt(i)),
+                      ),
+                    ]),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add split'),
+                    onPressed: () => setState(() => splitRows.add((
+                          category: TextEditingController(),
+                          amount: TextEditingController(),
+                        ))),
+                  ),
+                ),
+                Builder(builder: (context) {
+                  final total = parseDollarsToCents(amount.text) ?? 0;
+                  final splitTotal = splitRows.fold<int>(
+                      0, (s, r) => s + (parseDollarsToCents(r.amount.text) ?? 0));
+                  final matches = splitTotal == total;
+                  return Text(
+                    '${fmtCents(splitTotal)} of ${fmtCents(total)} allocated',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            matches ? null : Theme.of(context).colorScheme.error),
+                  );
+                }),
+                const SizedBox(height: 4),
+              ],
+              const SizedBox(height: 12),
               TextField(
-                  controller: category,
+                  controller: payee,
                   onSubmitted: (_) => Navigator.pop(context, true),
-                  onChanged: (_) => autoCategorized = false,
-                  decoration: InputDecoration(
-                      labelText: 'Category',
-                      helperText:
-                          autoCategorized ? 'Auto-categorized by rule' : null,
-                      border: const OutlineInputBorder())),
-              if (accounts.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                DropdownButtonFormField<int?>(
-                  initialValue: accountId,
                   decoration: const InputDecoration(
-                      labelText: 'Account (optional)',
+                      labelText: 'Payee (optional)',
+                      border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: tags,
+                  onSubmitted: (_) => Navigator.pop(context, true),
+                  decoration: const InputDecoration(
+                      labelText: 'Tags (optional, comma separated)',
+                      border: OutlineInputBorder())),
+              if (accounts.isNotEmpty || cards.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String?>(
+                  initialValue: source,
+                  decoration: const InputDecoration(
+                      labelText: 'Account or card (optional)',
+                      helperText: 'Linking one moves this amount off (or '
+                          'onto) its balance',
                       border: OutlineInputBorder()),
                   items: [
                     const DropdownMenuItem(
                         value: null, child: Text('Not linked')),
                     for (final a in accounts)
                       DropdownMenuItem(
-                        value: a.id,
+                        value: 'account:${a.id}',
                         child: Row(children: [
-                          Icon(accountIcon(a.type), size: 16),
+                          Icon(accountIcon(a.type), size: 16, color: accountTypeColor(context, a.type)),
                           const SizedBox(width: 8),
                           Text(a.name),
                         ]),
                       ),
+                    for (final c in cards)
+                      DropdownMenuItem(
+                        value: 'card:${c.id}',
+                        child: Row(children: [
+                          const Icon(Icons.credit_card, size: 16),
+                          const SizedBox(width: 8),
+                          Text(c.name),
+                        ]),
+                      ),
                   ],
-                  onChanged: (v) => setState(() => accountId = v),
+                  onChanged: (v) => setState(() => source = v),
                 ),
               ],
             ]),
@@ -635,17 +948,55 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
       if (context.mounted) warnNotSaved(context, 'enter an amount');
       return;
     }
-    await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
+    List<({String category, int amountCents})>? splits;
+    if (splitMode) {
+      splits = [
+        for (final row in splitRows)
+          if (row.category.text.trim().isNotEmpty)
+            (
+              category: row.category.text.trim(),
+              amountCents: parseDollarsToCents(row.amount.text) ?? 0,
+            ),
+      ];
+      final splitTotal = splits.fold(0, (s, r) => s + r.amountCents);
+      if (splits.isEmpty || splitTotal != cents) {
+        if (context.mounted) {
+          warnNotSaved(context, 'splits must add up to the total amount');
+        }
+        return;
+      }
+    }
+    final sourceParts = source?.split(':');
+    final isAccount = sourceParts == null || sourceParts[0] == 'account';
+    final entryId = await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
       profileId: profileId,
       date: DateTime.now(),
       amountCents: cents,
       type: type,
-      category: Value(
-          category.text.trim().isEmpty ? 'Other' : category.text.trim()),
+      category: Value(splitMode
+          ? 'Split'
+          : category.text.trim().isEmpty
+              ? 'Other'
+              : category.text.trim()),
       description: Value(
           description.text.trim().isEmpty ? null : description.text.trim()),
-      accountId: Value(accountId),
+      payee: Value(payee.text.trim().isEmpty ? null : payee.text.trim()),
+      accountId: Value(sourceParts == null || !isAccount
+          ? null
+          : int.parse(sourceParts[1])),
+      cardId: Value(sourceParts == null || isAccount
+          ? null
+          : int.parse(sourceParts[1])),
     ));
+    if (splits != null) {
+      await repo.setEntrySplits(
+          profileId: profileId, entryId: entryId, splits: splits);
+    }
+    final tagNames = tags.text.split(',');
+    if (tagNames.any((t) => t.trim().isNotEmpty)) {
+      await repo.setEntryTags(
+          profileId: profileId, entryId: entryId, tagNames: tagNames);
+    }
   }
 
   Future<void> _manageTargets(BuildContext context) async {

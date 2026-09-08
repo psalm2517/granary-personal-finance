@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:homebase_money/data/database.dart';
-import 'package:homebase_money/data/repository.dart';
+import 'package:granary/data/database.dart';
+import 'package:granary/data/repository.dart';
 
 void main() {
   late AppDatabase db;
@@ -78,5 +78,94 @@ void main() {
     expect(current.month.month, now.month);
     expect(current.incomeCents, 300000);
     expect(current.expenseCents, 45000);
+  });
+
+  group('account balance history', () {
+    test('editing an account records a snapshot for today', () async {
+      final id = await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Checking',
+          type: AccountType.checking,
+          balanceCents: const Value(10000)));
+
+      final history =
+          await repo.watchAccountBalanceHistory(accountId: id).first;
+      expect(history, hasLength(1));
+      expect(history.single.balanceCents, 10000);
+    });
+
+    test('a second edit the same day updates the point instead of adding one',
+        () async {
+      final id = await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Checking',
+          type: AccountType.checking,
+          balanceCents: const Value(10000)));
+
+      await repo.upsertAccount(AccountsCompanion(
+        id: Value(id),
+        profileId: Value(profileId),
+        name: const Value('Checking'),
+        type: const Value(AccountType.checking),
+        balanceCents: const Value(15000),
+      ));
+
+      final history =
+          await repo.watchAccountBalanceHistory(accountId: id).first;
+      expect(history, hasLength(1),
+          reason: 'same-day edits update the one point for today');
+      expect(history.single.balanceCents, 15000);
+    });
+
+    test('recordAccountSnapshotsForToday covers every account without '
+        'duplicating existing points', () async {
+      final a = await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Checking',
+          type: AccountType.checking,
+          balanceCents: const Value(10000)));
+      final b = await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Savings',
+          type: AccountType.savings,
+          balanceCents: const Value(50000)));
+
+      await repo.recordAccountSnapshotsForToday(profileId: profileId);
+
+      expect(await repo.watchAccountBalanceHistory(accountId: a).first,
+          hasLength(1));
+      expect(await repo.watchAccountBalanceHistory(accountId: b).first,
+          hasLength(1));
+    });
+
+    test('deleting an account removes its balance history', () async {
+      final id = await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Checking',
+          type: AccountType.checking,
+          balanceCents: const Value(10000)));
+
+      await repo.deleteAccount(profileId: profileId, id: id);
+
+      expect(await repo.watchAccountBalanceHistory(accountId: id).first,
+          isEmpty);
+    });
+
+    test('history is per account, not shared across them', () async {
+      final a = await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Checking',
+          type: AccountType.checking,
+          balanceCents: const Value(10000)));
+      await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Savings',
+          type: AccountType.savings,
+          balanceCents: const Value(50000)));
+
+      final history = await repo.watchAccountBalanceHistory(accountId: a).first;
+      expect(history, hasLength(1));
+      expect(history.single.balanceCents, 10000);
+    });
   });
 }

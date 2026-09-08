@@ -2,8 +2,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:homebase_money/data/database.dart';
-import 'package:homebase_money/main.dart';
+import 'package:granary/data/database.dart';
+import 'package:granary/main.dart';
 
 void main() {
   testWidgets('first run shows profile setup', (tester) async {
@@ -11,9 +11,9 @@ void main() {
     addTearDown(db.close);
     await tester.pumpWidget(ProviderScope(
       overrides: [databaseProvider.overrideWithValue(db)],
-      child: const HomebaseApp(),
+      child: const GranaryApp(),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to Homebase Money'), findsOneWidget);
+    expect(find.text('Welcome to Granary'), findsOneWidget);
   });
 }

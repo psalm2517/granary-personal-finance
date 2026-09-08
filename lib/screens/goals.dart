@@ -7,6 +7,7 @@ import '../data/repository.dart';
 import '../main.dart';
 import '../util/money.dart';
 import '../widgets/common.dart';
+import 'accounts.dart';
 
 IconData goalIcon(GoalType type) => switch (type) {
       GoalType.savings => Icons.savings_outlined,
@@ -33,10 +34,14 @@ class GoalsScreen extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Add goal'),
       ),
-      body: StreamBuilder<List<Goal>>(
-        stream: repo.watchGoals(profileId: profileId),
+      body: StreamBuilder<List<dynamic>>(
+        stream: combineLatest<dynamic>([
+          repo.watchGoals(profileId: profileId),
+          repo.watchAccounts(profileId: profileId),
+        ]),
         builder: (context, snap) {
-          final goals = snap.data ?? [];
+          final goals = (snap.data?[0] as List<Goal>?) ?? [];
+          final accounts = (snap.data?[1] as List<Account>?) ?? [];
           if (goals.isEmpty) {
             return const EmptyState(
               icon: Icons.flag_outlined,
@@ -47,13 +52,21 @@ class GoalsScreen extends ConsumerWidget {
             );
           }
 
-          final saved =
-              goals.fold(0, (s, g) => s + g.currentAmountCents);
+          // A goal linked to an account tracks that account's real balance
+          // instead of the manually-entered number, so it never drifts out
+          // of sync with what is actually saved.
+          int currentFor(Goal g) {
+            if (g.accountId == null) return g.currentAmountCents;
+            final account =
+                accounts.where((a) => a.id == g.accountId).firstOrNull;
+            return account?.balanceCents ?? g.currentAmountCents;
+          }
+
+          final saved = goals.fold(0, (s, g) => s + currentFor(g));
           final targets =
               goals.fold(0, (s, g) => s + g.targetAmountCents);
-          final done = goals
-              .where((g) => g.currentAmountCents >= g.targetAmountCents)
-              .length;
+          final done =
+              goals.where((g) => currentFor(g) >= g.targetAmountCents).length;
 
           return ListView(
             padding: kPagePadding,
@@ -87,7 +100,7 @@ class GoalsScreen extends ConsumerWidget {
                           'gone. Each goal tracks what you have put aside '
                           'against the target.',
                       'Progress is manual: use "Add progress" whenever you '
-                          'move money toward it. Homebase does not guess, '
+                          'move money toward it. Granary does not guess, '
                           'because the money usually sits in an account it '
                           'cannot tell apart from the rest.',
                       'Give a goal a target date and it works out what you '
@@ -95,7 +108,10 @@ class GoalsScreen extends ConsumerWidget {
                       'Goals are per profile, like everything else.',
                     ],
                   )),
-              for (final g in goals) _goalCard(context, ref, g, scheme),
+              for (final g in goals)
+                _goalCard(context, ref, g, currentFor(g),
+                    accounts.where((a) => a.id == g.accountId).firstOrNull,
+                    scheme),
             ],
           );
         },
@@ -103,15 +119,16 @@ class GoalsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _goalCard(
-      BuildContext context, WidgetRef ref, Goal g, ColorScheme scheme) {
-    final complete = g.currentAmountCents >= g.targetAmountCents;
+  Widget _goalCard(BuildContext context, WidgetRef ref, Goal g,
+      int currentCents, Account? linkedAccount, ColorScheme scheme) {
+    final complete = currentCents >= g.targetAmountCents;
     final ratio = g.targetAmountCents == 0
         ? 0.0
-        : (g.currentAmountCents / g.targetAmountCents).clamp(0.0, 1.0);
+        : (currentCents / g.targetAmountCents).clamp(0.0, 1.0);
     final remaining =
-        (g.targetAmountCents - g.currentAmountCents).clamp(0, 1 << 62);
-    final monthly = HomebaseRepository.monthlyNeededFor(g);
+        (g.targetAmountCents - currentCents).clamp(0, 1 << 62);
+    final monthly =
+        HomebaseRepository.monthlyNeededFor(g, currentCents: currentCents);
 
     return Card(
       child: Padding(
@@ -133,7 +150,9 @@ class GoalsScreen extends ConsumerWidget {
                       Text(
                           '${goalLabel(g.type)}'
                           '${g.targetDate == null ? '' : ' • by '
-                              '${_fmtMonthYear(g.targetDate!)}'}',
+                              '${_fmtMonthYear(g.targetDate!)}'}'
+                          '${linkedAccount == null ? '' : ' • tracks '
+                              '${linkedAccount.name}'}',
                           style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
@@ -156,7 +175,7 @@ class GoalsScreen extends ConsumerWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                Text('${fmtCents(g.currentAmountCents)} '
+                Text('${fmtCents(currentCents)} '
                     'of ${fmtCents(g.targetAmountCents)}'),
                 const Spacer(),
                 if (complete)
@@ -190,13 +209,14 @@ class GoalsScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                if (!complete)
+                if (!complete && linkedAccount == null)
                   FilledButton.tonalIcon(
                     onPressed: () => _addProgress(context, ref, g),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Add progress'),
                   ),
-                if (!complete) const SizedBox(width: 8),
+                if (!complete && linkedAccount == null)
+                  const SizedBox(width: 8),
                 TextButton.icon(
                     onPressed: () => _edit(context, ref, g),
                     icon: const Icon(Icons.edit_outlined, size: 18),
@@ -304,7 +324,10 @@ class GoalsScreen extends ConsumerWidget {
 
   Future<void> _edit(
       BuildContext context, WidgetRef ref, Goal? existing) async {
+    final repo = ref.read(repositoryProvider);
     final profileId = ref.read(activeProfileProvider)!.id;
+    final accounts = await repo.watchAccounts(profileId: profileId).first;
+    if (!context.mounted) return;
     final name = TextEditingController(text: existing?.name);
     final target = TextEditingController(
         text: existing == null
@@ -316,6 +339,7 @@ class GoalsScreen extends ConsumerWidget {
             : (existing.currentAmountCents / 100).toString());
     var type = existing?.type ?? GoalType.savings;
     DateTime? targetDate = existing?.targetDate;
+    int? accountId = existing?.accountId;
     String? nameError;
     String? targetError;
 
@@ -378,8 +402,35 @@ class GoalsScreen extends ConsumerWidget {
                     },
                   ),
                   const SizedBox(height: 12),
-                  DialogField(current, 'Already put aside (\$)',
-                      helper: 'Leave blank to start from zero'),
+                  if (accountId == null)
+                    DialogField(current, 'Already put aside (\$)',
+                        helper: 'Leave blank to start from zero'),
+                  if (accounts.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int?>(
+                      initialValue: accountId,
+                      decoration: const InputDecoration(
+                          labelText: 'Track an account (optional)',
+                          helperText: 'Progress follows this account\'s '
+                              'balance instead of a manual number',
+                          helperMaxLines: 2,
+                          border: OutlineInputBorder()),
+                      items: [
+                        const DropdownMenuItem(
+                            value: null, child: Text('Not linked')),
+                        for (final a in accounts)
+                          DropdownMenuItem(
+                            value: a.id,
+                            child: Row(children: [
+                              Icon(accountIcon(a.type), size: 16, color: accountTypeColor(context, a.type)),
+                              const SizedBox(width: 8),
+                              Text(a.name),
+                            ]),
+                          ),
+                      ],
+                      onChanged: (v) => setLocal(() => accountId = v),
+                    ),
+                  ],
                   Align(
                     alignment: Alignment.centerLeft,
                     child: OutlinedButton.icon(
@@ -456,9 +507,15 @@ class GoalsScreen extends ConsumerWidget {
           name: Value(name.text.trim()),
           type: Value(type),
           targetAmountCents: Value(targetCents),
-          currentAmountCents:
-              Value(parseDollarsToCents(current.text) ?? 0),
+          // When linked to an account, leave the stored column alone rather
+          // than overwriting it with a blank field's zero — the account
+          // balance is the real number now, and the stored value becomes
+          // the fallback again if the account is later unlinked or deleted.
+          currentAmountCents: accountId != null
+              ? const Value.absent()
+              : Value(parseDollarsToCents(current.text) ?? 0),
           targetDate: Value(targetDate),
+          accountId: Value(accountId),
         ));
   }
 

@@ -1,4 +1,4 @@
-package dev.homebase.homebase_money
+package dev.granary.granary
 
 import io.flutter.embedding.android.FlutterActivity
 

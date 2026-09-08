@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:homebase_money/data/database.dart';
-import 'package:homebase_money/data/repository.dart';
+import 'package:granary/data/database.dart';
+import 'package:granary/data/repository.dart';
 
 void main() {
   late AppDatabase db;
@@ -55,6 +55,53 @@ void main() {
     expect(await repo.profileById(theirs), isNull);
     expect((await repo.watchCards(profileId: theirs).first), isEmpty);
     expect((await repo.watchCards(profileId: mine).first).length, 1);
+  });
+
+  test('deleting a profile that has tagged an entry does not crash on a '
+      'foreign key', () async {
+    final mine = await addProfile('Owner', admin: true);
+    final theirs = await addProfile('Mom');
+    final entryId = await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
+        profileId: theirs,
+        date: DateTime.now(),
+        amountCents: 5000,
+        type: EntryType.expense));
+    await repo.setEntryTags(
+        profileId: theirs, entryId: entryId, tagNames: ['groceries']);
+
+    await repo.deleteProfile(id: theirs);
+
+    expect(await repo.profileById(theirs), isNull);
+    expect(await repo.profileById(mine), isNotNull);
+  });
+
+  test('deleting a profile removes its recurring transfers via its '
+      'accounts cascading away', () async {
+    final mine = await addProfile('Owner', admin: true);
+    final theirs = await addProfile('Mom');
+    final from = await repo.upsertAccount(AccountsCompanion.insert(
+        profileId: theirs,
+        name: 'Checking',
+        type: AccountType.checking,
+        balanceCents: const Value(10000)));
+    final to = await repo.upsertAccount(AccountsCompanion.insert(
+        profileId: theirs,
+        name: 'Savings',
+        type: AccountType.savings,
+        balanceCents: const Value(0)));
+    await repo.upsertRecurringTransfer(RecurringTransfersCompanion.insert(
+        profileId: theirs,
+        name: 'To savings',
+        fromAccountId: from,
+        toAccountId: to,
+        amountCents: 5000,
+        frequency: PayFrequency.monthly,
+        anchorDate: DateTime.now()));
+
+    await repo.deleteProfile(id: theirs);
+
+    expect(await repo.profileById(theirs), isNull);
+    expect(await repo.profileById(mine), isNotNull);
   });
 
   test('the only admin cannot be deleted', () async {

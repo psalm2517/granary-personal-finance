@@ -10,6 +10,7 @@ import '../widgets/common.dart';
 import '../widgets/payment_dialog.dart';
 import '../widgets/payoff_simulator.dart';
 import '../widgets/payment_history.dart';
+import '../widgets/transaction_history.dart';
 import '../util/payoff.dart';
 
 class CardsScreen extends ConsumerWidget {
@@ -70,14 +71,10 @@ class CardsScreen extends ConsumerWidget {
                       'A card has two dates each month: the statement closing '
                           'day, and the payment due day roughly 21-25 days '
                           'later.',
-                      'The balance on your closing day is what the card '
-                          'issuer reports to the credit bureaus, so that is '
-                          'the number your utilization is judged on — not '
-                          'what you owe after paying.',
-                      'Paying down the balance before the statement closes '
-                          'therefore lowers your reported utilization. Paying '
-                          'in full by the due date is what avoids interest.',
-                      'Set both days when you edit a card and Homebase works '
+                      'Granary uses these purely for timing — reminders and '
+                          'the "closes in N days" chip. Balance and '
+                          'utilization always reflect what you owe right now.',
+                      'Set both days when you edit a card and Granary works '
                           'out the next occurrence of each automatically, '
                           'including short months.',
                     ],
@@ -88,19 +85,16 @@ class CardsScreen extends ConsumerWidget {
                     leading: const Icon(Icons.credit_card),
                     title: Text(c.name),
                     subtitle: Text(
-                        'Now ${fmtCents(c.balanceCents)} • reported '
-                        '${fmtCents(c.statementBalanceCents)} of '
+                        '${fmtCents(c.balanceCents)} of '
                         '${fmtCents(c.creditLimitCents)}'),
                     trailing: _cycleChip(context, c),
                     childrenPadding: const EdgeInsets.all(16),
                     expandedCrossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      DetailRow('Current balance', fmtCents(c.balanceCents)),
-                      DetailRow('Statement balance (reported)',
-                          fmtCents(c.statementBalanceCents)),
+                      DetailRow('Balance', fmtCents(c.balanceCents)),
                       DetailRow('Limit', fmtCents(c.creditLimitCents)),
                       DetailRow(
-                          'Utilization (reported)',
+                          'Utilization',
                           c.creditLimitCents == 0
                               ? '—'
                               : '${(HomebaseRepository.utilizationOf(c) * 100).toStringAsFixed(1)}%'),
@@ -128,6 +122,9 @@ class CardsScreen extends ConsumerWidget {
                               ? 'not set'
                               : _fmtDate(
                                   HomebaseRepository.cycleFor(c).paymentDue!)),
+                      TransactionHistory(
+                          stream: repo.watchCardHistory(
+                              profileId: profileId, cardId: c.id)),
                       PaymentHistory(
                           accountType: PaymentAccountType.card,
                           accountId: c.id),
@@ -281,10 +278,6 @@ class CardsScreen extends ConsumerWidget {
             : (existing.monthlyFeeCents / 100).toString());
     final statementDay = TextEditingController(
         text: existing?.statementCloseDay?.toString() ?? '');
-    final statementBalance = TextEditingController(
-        text: existing == null
-            ? ''
-            : (existing.statementBalanceCents / 100).toString());
     final minimumDue = TextEditingController(
         text: existing?.minimumPaymentDueCents == null
             ? ''
@@ -306,11 +299,8 @@ class CardsScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               DialogField(name, 'Name', autofocus: true),
-              DialogField(balance, 'Current balance (\$)',
+              DialogField(balance, 'Balance (\$)',
                   helper: 'What you owe right now'),
-              DialogField(statementBalance, 'Statement balance (\$)',
-                  helper: 'Balance on your last statement — this is what '
-                      'gets reported to the credit bureaus'),
               DialogField(limit, 'Credit limit (\$)'),
               DialogField(apr, 'APR (%)'),
               DialogField(annualFee, 'Annual fee (\$)'),
@@ -387,8 +377,6 @@ class CardsScreen extends ConsumerWidget {
           annualFeeCents: Value(parseDollarsToCents(annualFee.text) ?? 0),
           monthlyFeeCents: Value(parseDollarsToCents(monthlyFee.text) ?? 0),
           statementCloseDay: Value(_parseDay(statementDay.text)),
-          statementBalanceCents:
-              Value(parseDollarsToCents(statementBalance.text) ?? 0),
           minimumPaymentDueCents:
               Value(parseDollarsToCents(minimumDue.text)),
           annualFeeDate: Value(annualFeeDate),

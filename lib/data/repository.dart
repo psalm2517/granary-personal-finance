@@ -1,7 +1,22 @@
 import 'package:drift/drift.dart';
 
+import '../util/streams.dart';
 import 'database.dart';
 import 'reminder.dart';
+
+/// One kind of activity seen in [HomebaseRepository.watchAccountHistory] and
+/// [HomebaseRepository.watchCardHistory].
+enum AccountActivityKind { income, expense, transferIn, transferOut }
+
+/// One line of an account or card's activity feed. [amountCents] is signed
+/// the way it actually moved the balance — always negative for a withdrawal
+/// or outgoing transfer, positive otherwise.
+typedef AccountActivity = ({
+  DateTime date,
+  String label,
+  int amountCents,
+  AccountActivityKind kind,
+});
 
 /// All data access goes through this layer. Every query scoped to user data
 /// takes a required [profileId] — widgets never touch Drift directly, and
@@ -12,6 +27,17 @@ class HomebaseRepository {
   HomebaseRepository(this._db);
 
   final AppDatabase _db;
+
+  /// Account types you would actually move a real transaction, bill
+  /// payment or transfer through — a retirement or investment account
+  /// isn't something you manually withdraw from or charge a bill to, so it
+  /// is left out of those pickers the same way it's left out of the cash
+  /// flow projection.
+  static const cashAccountTypes = {
+    AccountType.checking,
+    AccountType.savings,
+    AccountType.cash,
+  };
 
   // ---- Profiles ----
 
@@ -62,10 +88,16 @@ class HomebaseRepository {
       await (_db.delete(_db.budgetEntries)
             ..where((t) => t.profileId.equals(id)))
           .go();
+      // Tags cascade their BudgetEntryTags links away, but nothing cascades
+      // into Tags itself — it must be deleted explicitly or a profile that
+      // ever tagged an entry can never be deleted.
+      await (_db.delete(_db.tags)..where((t) => t.profileId.equals(id))).go();
       await (_db.delete(_db.creditScoreSnapshots)
             ..where((t) => t.profileId.equals(id)))
           .go();
-      // Accounts must go after budget entries, which reference them.
+      // Accounts must go after budget entries, which reference them. Its
+      // own cascades take care of AccountBalanceSnapshots and any
+      // RecurringTransfers (and their TransferLogs) naming these accounts.
       await (_db.delete(_db.accounts)..where((t) => t.profileId.equals(id)))
           .go();
       await (_db.delete(_db.billPayments)
@@ -87,8 +119,69 @@ class HomebaseRepository {
 
   Future<int> upsertAccount(AccountsCompanion entry) async {
     final id = await _db.into(_db.accounts).insertOnConflictUpdate(entry);
+    final account =
+        await (_db.select(_db.accounts)..where((a) => a.id.equals(id)))
+            .getSingle();
+    await _recordAccountSnapshot(
+        profileId: account.profileId,
+        accountId: id,
+        balanceCents: account.balanceCents);
     await recordNetWorthSnapshot(profileId: entry.profileId.value);
     return id;
+  }
+
+  Future<void> _recordAccountSnapshot({
+    required int profileId,
+    required int accountId,
+    required int balanceCents,
+    DateTime? date,
+  }) async {
+    final day = () {
+      final d = date ?? DateTime.now();
+      return DateTime(d.year, d.month, d.day);
+    }();
+    final entry = AccountBalanceSnapshotsCompanion.insert(
+      profileId: profileId,
+      accountId: accountId,
+      date: day,
+      balanceCents: balanceCents,
+    );
+    await _db.into(_db.accountBalanceSnapshots).insert(
+          entry,
+          onConflict: DoUpdate(
+            (_) => AccountBalanceSnapshotsCompanion(
+                balanceCents: Value(balanceCents)),
+            target: [
+              _db.accountBalanceSnapshots.accountId,
+              _db.accountBalanceSnapshots.date
+            ],
+          ),
+        );
+  }
+
+  /// A point for today for every account, even one nobody touched — so a
+  /// sparkline doesn't have a gap just because a balance didn't change.
+  /// Call on app launch, alongside [recordNetWorthSnapshot].
+  Future<void> recordAccountSnapshotsForToday(
+      {required int profileId}) async {
+    final accounts = await watchAccounts(profileId: profileId).first;
+    for (final account in accounts) {
+      await _recordAccountSnapshot(
+          profileId: profileId,
+          accountId: account.id,
+          balanceCents: account.balanceCents);
+    }
+  }
+
+  /// Recent balance history for one account, oldest first, for a sparkline.
+  Stream<List<AccountBalanceSnapshot>> watchAccountBalanceHistory(
+      {required int accountId, int days = 30}) {
+    final since = DateTime.now().subtract(Duration(days: days));
+    return (_db.select(_db.accountBalanceSnapshots)
+          ..where((s) =>
+              s.accountId.equals(accountId) & s.date.isBiggerOrEqualValue(since))
+          ..orderBy([(s) => OrderingTerm.asc(s.date)]))
+        .watch();
   }
 
   Future<int> deleteAccount(
@@ -99,6 +192,34 @@ class HomebaseRepository {
     await (_db.update(_db.budgetEntries)
           ..where((e) => e.profileId.equals(profileId) & e.accountId.equals(id)))
         .write(const BudgetEntriesCompanion(accountId: Value(null)));
+
+    // Same for goals linked to this account — keep its last balance as the
+    // manual progress number instead of losing it when the link is cleared.
+    final account = await (_db.select(_db.accounts)
+          ..where((a) => a.profileId.equals(profileId) & a.id.equals(id)))
+        .getSingleOrNull();
+    if (account != null) {
+      await (_db.update(_db.goals)
+            ..where((g) =>
+                g.profileId.equals(profileId) & g.accountId.equals(id)))
+          .write(GoalsCompanion(
+              accountId: const Value(null),
+              currentAmountCents: Value(account.balanceCents)));
+    }
+
+    // Same for bills paid from this account; the accountId is not a foreign
+    // key because it spans two tables.
+    await (_db.update(_db.bills)
+          ..where((b) =>
+              b.profileId.equals(profileId) &
+              b.paymentSourceType.equalsValue(PaymentSourceType.account) &
+              b.paymentSourceId.equals(id)))
+        .write(const BillsCompanion(
+            paymentSourceType: Value(null), paymentSourceId: Value(null)));
+
+    // Recurring transfers naming this account as either side are removed by
+    // the foreign key's cascade — a transfer with only one side left cannot
+    // mean anything.
     final rows = await (_db.delete(_db.accounts)
           ..where((a) => a.profileId.equals(profileId) & a.id.equals(id)))
         .go();
@@ -138,7 +259,7 @@ class HomebaseRepository {
 
   /// Records today's net worth, replacing today's row if one exists. Called
   /// after anything that moves a balance, and on app entry so a day with no
-  /// edits still gets a point once you open Homebase.
+  /// edits still gets a point once you open Granary.
   Future<void> recordNetWorthSnapshot({required int profileId}) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -232,6 +353,19 @@ class HomebaseRepository {
               p.accountType.equalsValue(PaymentAccountType.card) &
               p.accountId.equals(id)))
         .go();
+    // Same for bills paid with this card.
+    await (_db.update(_db.bills)
+          ..where((b) =>
+              b.profileId.equals(profileId) &
+              b.paymentSourceType.equalsValue(PaymentSourceType.card) &
+              b.paymentSourceId.equals(id)))
+        .write(const BillsCompanion(
+            paymentSourceType: Value(null), paymentSourceId: Value(null)));
+    // And budget entries charged to this card — the spending itself still
+    // happened and should survive, same as deleteAccount does for accountId.
+    await (_db.update(_db.budgetEntries)
+          ..where((e) => e.profileId.equals(profileId) & e.cardId.equals(id)))
+        .write(const BudgetEntriesCompanion(cardId: Value(null)));
     final rows = await (_db.delete(_db.creditCards)
           ..where((c) => c.profileId.equals(profileId) & c.id.equals(id)))
         .go();
@@ -373,6 +507,10 @@ class HomebaseRepository {
       await _syncBillPaymentEntry(
           profileId: profileId, billId: billId, periodStart: periodStart);
     } else {
+      // Reverse whatever balance change the payment caused before the
+      // delete below removes the record that it ever happened.
+      await _reverseBillPaymentBalance(
+          profileId: profileId, billId: billId, periodStart: periodStart);
       await (_db.delete(_db.billPayments)
             ..where((p) =>
                 p.profileId.equals(profileId) &
@@ -382,10 +520,21 @@ class HomebaseRepository {
     }
   }
 
-  Future<int> deleteBill({required int profileId, required int id}) =>
-      (_db.delete(_db.bills)
-            ..where((b) => b.profileId.equals(profileId) & b.id.equals(id)))
-          .go();
+  Future<int> deleteBill({required int profileId, required int id}) async {
+    // Reverse the balance effect of every period this bill was ever
+    // materialized paid for, or deleting it would leave a card or account
+    // balance permanently off by however much it moved.
+    final payments = await (_db.select(_db.billPayments)
+          ..where((p) => p.profileId.equals(profileId) & p.billId.equals(id)))
+        .get();
+    for (final payment in payments) {
+      await _reverseBillPaymentBalance(
+          profileId: profileId, billId: id, periodStart: payment.periodStart);
+    }
+    return (_db.delete(_db.bills)
+          ..where((b) => b.profileId.equals(profileId) & b.id.equals(id)))
+        .go();
+  }
 
   /// Creates the expense entry that mirrors a bill payment, so paying a bill
   /// shows up in the month's spending without typing it twice. Un-paying
@@ -416,7 +565,62 @@ class HomebaseRepository {
           category: Value(bill.category),
           description: Value(bill.name),
           sourceBillPaymentId: Value(payment.id),
+          // BudgetEntries only links to Accounts, not cards, so a card
+          // payment source has nothing to mirror here — the bill itself
+          // still remembers it.
+          accountId: bill.paymentSourceType == PaymentSourceType.account
+              ? Value(bill.paymentSourceId)
+              : const Value.absent(),
         ));
+
+    // A bill paid from a bank account leaves that account, same as a real
+    // withdrawal; one charged to a card adds to what is owed on it.
+    if (bill.paymentSourceId != null) {
+      switch (bill.paymentSourceType!) {
+        case PaymentSourceType.account:
+          await _adjustAccountBalance(bill.paymentSourceId!, -bill.amountCents);
+        case PaymentSourceType.card:
+          await _adjustCardBalance(bill.paymentSourceId!, bill.amountCents);
+      }
+      await recordNetWorthSnapshot(profileId: profileId);
+    }
+  }
+
+  /// Undoes the balance change [_syncBillPaymentEntry] made for this bill's
+  /// payment in [periodStart], using the bill's payment source as it stands
+  /// now — the same assumption the mirrored budget entry already makes,
+  /// since neither is retroactively updated if the source changes later.
+  Future<void> _reverseBillPaymentBalance({
+    required int profileId,
+    required int billId,
+    required DateTime periodStart,
+  }) async {
+    final payment = await (_db.select(_db.billPayments)
+          ..where((p) =>
+              p.billId.equals(billId) & p.periodStart.equals(periodStart)))
+        .getSingleOrNull();
+    if (payment == null) return;
+    // Only reverse a balance change that was actually applied — the
+    // mirrored entry existing is what proves that.
+    final entry = await (_db.select(_db.budgetEntries)
+          ..where((e) => e.sourceBillPaymentId.equals(payment.id)))
+        .getSingleOrNull();
+    if (entry == null) return;
+
+    final bill = await (_db.select(_db.bills)..where((b) => b.id.equals(billId)))
+        .getSingleOrNull();
+    if (bill == null ||
+        bill.paymentSourceType == null ||
+        bill.paymentSourceId == null) {
+      return;
+    }
+    switch (bill.paymentSourceType!) {
+      case PaymentSourceType.account:
+        await _adjustAccountBalance(bill.paymentSourceId!, bill.amountCents);
+      case PaymentSourceType.card:
+        await _adjustCardBalance(bill.paymentSourceId!, -bill.amountCents);
+    }
+    await recordNetWorthSnapshot(profileId: profileId);
   }
 
   /// Autopay bills are treated as paid once their due date passes, but that
@@ -605,10 +809,15 @@ class HomebaseRepository {
   /// the whole months remaining. Null when there is no target date, when the
   /// goal is already met, or when the date has passed — there is no
   /// meaningful monthly figure in those cases.
-  static int? monthlyNeededFor(Goal goal, {DateTime? now}) {
+  ///
+  /// [currentCents] overrides [Goal.currentAmountCents] — pass the linked
+  /// account's live balance for a goal tied to one, since that is the real
+  /// progress rather than the stored (and possibly stale) column.
+  static int? monthlyNeededFor(Goal goal, {DateTime? now, int? currentCents}) {
     final target = goal.targetDate;
     if (target == null) return null;
-    final remaining = goal.targetAmountCents - goal.currentAmountCents;
+    final remaining =
+        goal.targetAmountCents - (currentCents ?? goal.currentAmountCents);
     if (remaining <= 0) return null;
     final n = now ?? DateTime.now();
     final months = (target.year - n.year) * 12 + (target.month - n.month);
@@ -648,7 +857,7 @@ class HomebaseRepository {
       final n = now ?? DateTime.now();
       return DateTime(n.year, n.month, n.day);
     }();
-    final horizon = today.add(Duration(days: withinDays));
+    final horizon = DateTime(today.year, today.month, today.day + withinDays);
     final reminders = <Reminder>[];
 
     final billRows = await watchBillsForMonth(
@@ -667,7 +876,8 @@ class HomebaseRepository {
       ));
     }
 
-    final feeHorizon = today.add(Duration(days: annualFeeWithinDays));
+    final feeHorizon =
+        DateTime(today.year, today.month, today.day + annualFeeWithinDays);
     final cards = await watchCards(profileId: profileId).first;
     for (final card in cards) {
       if (card.paymentDueDay != null && card.balanceCents > 0) {
@@ -735,9 +945,9 @@ class HomebaseRepository {
           .go();
 
   /// The utilization to suggest when logging a score: what your cards are
-  /// currently reporting. Saves retyping a figure Homebase already knows,
+  /// currently reporting. Saves retyping a figure Granary already knows,
   /// and keeps the logged snapshot consistent with the dashboard.
-  Future<double> currentReportedUtilization({required int profileId}) async {
+  Future<double> currentUtilization({required int profileId}) async {
     final cards = await watchCards(profileId: profileId).first;
     return overallUtilization(cards);
   }
@@ -757,13 +967,152 @@ class HomebaseRepository {
         .watch();
   }
 
-  Future<int> addBudgetEntry(BudgetEntriesCompanion entry) =>
-      _db.into(_db.budgetEntries).insert(entry);
+  /// Every entry for a profile, newest first, with no month restriction —
+  /// the raw material for a searchable transaction register rather than
+  /// the Budget screen's one-month-at-a-time view. Capped at [limit] since
+  /// a register is for finding something recent, not scrolling forever.
+  Stream<List<BudgetEntry>> watchAllEntries(
+          {required int profileId, int limit = 500}) =>
+      (_db.select(_db.budgetEntries)
+            ..where((e) => e.profileId.equals(profileId))
+            ..orderBy([(e) => OrderingTerm.desc(e.date)])
+            ..limit(limit))
+          .watch();
 
-  Future<int> deleteBudgetEntry({required int profileId, required int id}) =>
-      (_db.delete(_db.budgetEntries)
+  /// Adding an entry linked to an account or card is a real withdrawal,
+  /// deposit or charge, not just a label — an expense leaves an account or
+  /// adds to a card's balance (it is now owed), and income does the
+  /// opposite. An entry with no link only affects the budget, as always.
+  Future<int> addBudgetEntry(BudgetEntriesCompanion entry) async {
+    late int id;
+    await _db.transaction(() async {
+      id = await _db.into(_db.budgetEntries).insert(entry);
+      final accountId =
+          entry.accountId.present ? entry.accountId.value : null;
+      final cardId = entry.cardId.present ? entry.cardId.value : null;
+      final isExpense = entry.type.value == EntryType.expense;
+      if (accountId != null) {
+        await _adjustAccountBalance(
+            accountId, isExpense ? -entry.amountCents.value : entry.amountCents.value);
+      }
+      if (cardId != null) {
+        await _adjustCardBalance(
+            cardId, isExpense ? entry.amountCents.value : -entry.amountCents.value);
+      }
+    });
+    if ((entry.accountId.present && entry.accountId.value != null) ||
+        (entry.cardId.present && entry.cardId.value != null)) {
+      await recordNetWorthSnapshot(profileId: entry.profileId.value);
+    }
+    return id;
+  }
+
+  /// Reverses [addBudgetEntry]'s balance effect before removing the entry
+  /// that recorded it, the same way un-paying a bill does.
+  Future<int> deleteBudgetEntry({required int profileId, required int id}) async {
+    final entry = await (_db.select(_db.budgetEntries)
+          ..where((e) => e.profileId.equals(profileId) & e.id.equals(id)))
+        .getSingleOrNull();
+    late int rows;
+    await _db.transaction(() async {
+      rows = await (_db.delete(_db.budgetEntries)
             ..where((e) => e.profileId.equals(profileId) & e.id.equals(id)))
           .go();
+      if (entry != null) {
+        final isExpense = entry.type == EntryType.expense;
+        if (entry.accountId != null) {
+          await _adjustAccountBalance(
+              entry.accountId!, isExpense ? entry.amountCents : -entry.amountCents);
+        }
+        if (entry.cardId != null) {
+          await _adjustCardBalance(
+              entry.cardId!, isExpense ? -entry.amountCents : entry.amountCents);
+        }
+      }
+    });
+    if (entry?.accountId != null || entry?.cardId != null) {
+      await recordNetWorthSnapshot(profileId: profileId);
+    }
+    return rows;
+  }
+
+  // ---- Splits ----
+  //
+  // A split breaks one entry's total across more than one category — e.g. a
+  // single $150 store run entered as $100 groceries + $50 household. The
+  // parent entry keeps the full amount and its own category as a fallback;
+  // splits are additive detail, not a replacement for it.
+
+  /// All splits for every entry a profile has, keyed by entry id — one
+  /// query for a whole month's register rather than one per entry shown.
+  Stream<Map<int, List<TransactionSplit>>> watchSplitsByEntry(
+      {required int profileId}) {
+    return (_db.select(_db.transactionSplits)
+          ..where((s) => s.profileId.equals(profileId)))
+        .watch()
+        .map((rows) {
+      final map = <int, List<TransactionSplit>>{};
+      for (final row in rows) {
+        map.putIfAbsent(row.entryId, () => []).add(row);
+      }
+      return map;
+    });
+  }
+
+  /// Replaces an entry's splits wholesale — the same "set, don't merge"
+  /// shape as [setEntryTags], so editing a split is delete-and-reinsert
+  /// rather than reconciling a diff. A row with a zero amount is dropped
+  /// rather than stored, since it splits nothing.
+  Future<void> setEntrySplits({
+    required int profileId,
+    required int entryId,
+    required List<({String category, int amountCents})> splits,
+  }) async {
+    await _db.transaction(() async {
+      await (_db.delete(_db.transactionSplits)
+            ..where((s) => s.entryId.equals(entryId)))
+          .go();
+      for (final s in splits) {
+        if (s.amountCents == 0) continue;
+        await _db.into(_db.transactionSplits).insert(
+              TransactionSplitsCompanion.insert(
+                profileId: profileId,
+                entryId: entryId,
+                category: s.category,
+                amountCents: s.amountCents,
+              ),
+            );
+      }
+    });
+  }
+
+  Future<List<TransactionSplit>> splitsFor({required int entryId}) =>
+      (_db.select(_db.transactionSplits)
+            ..where((s) => s.entryId.equals(entryId)))
+          .get();
+
+  /// Expands entries into per-category rows for totals and reports — a
+  /// split entry contributes each of its slices under their own category
+  /// instead of once under the parent's single fallback category, so "where
+  /// it went" and the cash flow chart reflect the real breakdown.
+  static List<({String category, int amountCents, EntryType type})>
+      expandForCategoryTotals(
+    List<BudgetEntry> entries,
+    Map<int, List<TransactionSplit>> splitsByEntry,
+  ) {
+    final rows = <({String category, int amountCents, EntryType type})>[];
+    for (final e in entries) {
+      final splits = splitsByEntry[e.id];
+      if (splits == null || splits.isEmpty) {
+        rows.add((category: e.category, amountCents: e.amountCents, type: e.type));
+      } else {
+        for (final s in splits) {
+          rows.add((category: s.category, amountCents: s.amountCents, type: e.type));
+        }
+      }
+    }
+    return rows;
+  }
 
   // ---- Budget targets (spent-vs-target) ----
 
@@ -789,20 +1138,6 @@ class HomebaseRepository {
       (_db.delete(_db.budgetTargets)
             ..where((t) => t.profileId.equals(profileId) & t.id.equals(id)))
           .go();
-
-  /// Live map of category -> total expenses for [month]. The budget screen
-  /// pairs this with [watchBudgetTargets]; it re-emits on every entry change,
-  /// so progress bars are always current — no scheduled refresh.
-  Stream<Map<String, int>> watchSpentByCategory(
-      {required int profileId, required DateTime month}) {
-    return watchBudgetForMonth(profileId: profileId, month: month).map((rows) {
-      final sums = <String, int>{};
-      for (final e in rows.where((e) => e.type == EntryType.expense)) {
-        sums[e.category] = (sums[e.category] ?? 0) + e.amountCents;
-      }
-      return sums;
-    });
-  }
 
   // ---- Category rules (auto-categorization) ----
 
@@ -885,14 +1220,25 @@ class HomebaseRepository {
   }
 
   /// Paydays for [schedule] from its anchor date through [until].
-  static List<DateTime> paydatesFor(PaycheckSchedule schedule, DateTime until) {
+  static List<DateTime> paydatesFor(PaycheckSchedule schedule, DateTime until) =>
+      _occurrencesFor(schedule.anchorDate, schedule.frequency, until);
+
+  /// Every date a [frequency] schedule anchored at [anchor] lands on, up
+  /// through [until]. Shared by paycheck schedules and recurring transfers —
+  /// both are just "this amount, on this cadence, starting from this date".
+  static List<DateTime> _occurrencesFor(
+      DateTime anchor, PayFrequency frequency, DateTime until) {
     final dates = <DateTime>[];
-    var d = schedule.anchorDate;
+    var d = anchor;
     while (!d.isAfter(until)) {
       dates.add(d);
-      d = switch (schedule.frequency) {
-        PayFrequency.weekly => d.add(const Duration(days: 7)),
-        PayFrequency.biweekly => d.add(const Duration(days: 14)),
+      d = switch (frequency) {
+        // Calendar-day construction, not Duration addition — adding a fixed
+        // Duration drifts off local midnight across a DST transition, which
+        // then breaks exact-DateTime lookups (e.g. projectCashFlow's day
+        // map) for every date generated after the drift.
+        PayFrequency.weekly => DateTime(d.year, d.month, d.day + 7),
+        PayFrequency.biweekly => DateTime(d.year, d.month, d.day + 14),
         // 1st & 15th style: alternate half-month steps from the anchor day.
         PayFrequency.semimonthly => d.day < 15
             ? DateTime(d.year, d.month, d.day + 14)
@@ -921,9 +1267,16 @@ class HomebaseRepository {
                 p.profileId.equals(profileId) &
                 p.scheduleId.equals(schedule.id)))
           .get();
-      final have = existing.map((p) => p.date).toSet();
+      // Compared by calendar day, not exact DateTime: a stored date can
+      // carry a stray time-of-day component (the source of a real DST bug
+      // fixed elsewhere), and comparing exact instants would then see a
+      // "new" occurrence that is really the same day and generate a
+      // duplicate paycheck instead of recognizing it already exists.
+      final have = existing
+          .map((p) => DateTime(p.date.year, p.date.month, p.date.day))
+          .toSet();
       for (final date in paydatesFor(schedule, until)) {
-        if (!have.contains(date)) {
+        if (!have.contains(DateTime(date.year, date.month, date.day))) {
           await _db.into(_db.paychecks).insert(PaychecksCompanion.insert(
                 profileId: profileId,
                 name: schedule.name,
@@ -977,7 +1330,7 @@ class HomebaseRepository {
   }
 
   /// Monthly card fees actually charged every month — just the monthly fee.
-  /// Annual fees aren't tied to a known month in Homebase, so they live
+  /// Annual fees aren't tied to a known month in Granary, so they live
   /// entirely in [watchReserveForCardFeesCents] rather than guessing when
   /// they land.
   Stream<int> watchCardFeesDueThisMonthCents({required int profileId}) =>
@@ -1005,19 +1358,17 @@ class HomebaseRepository {
       watchCards(profileId: profileId).map((cards) => cards.fold(
           0, (sum, c) => sum + (c.annualFeeCents / 12).round()));
 
-  /// Utilization for a single card, from the balance the issuer actually
-  /// reported — the statement balance, not what is owed right now. This is
-  /// the number a credit score is judged on.
+  /// Utilization for a single card: balance divided by credit limit.
   static double utilizationOf(CreditCard card) => card.creditLimitCents == 0
       ? 0
-      : card.statementBalanceCents / card.creditLimitCents;
+      : card.balanceCents / card.creditLimitCents;
 
-  /// Overall reported utilization across every card.
+  /// Overall utilization across every card.
   static double overallUtilization(List<CreditCard> cards) {
     final limit = cards.fold(0, (s, c) => s + c.creditLimitCents);
     if (limit == 0) return 0;
-    final reported = cards.fold(0, (s, c) => s + c.statementBalanceCents);
-    return reported / limit;
+    final balance = cards.fold(0, (s, c) => s + c.balanceCents);
+    return balance / limit;
   }
 
   /// Where a card is in its statement cycle right now: when the statement
@@ -1157,4 +1508,340 @@ class HomebaseRepository {
       (_db.delete(_db.paycheckAllocations)
             ..where((a) => a.profileId.equals(profileId) & a.id.equals(id)))
           .go();
+
+  // ---- Tags ----
+
+  Stream<List<Tag>> watchTags({required int profileId}) =>
+      (_db.select(_db.tags)
+            ..where((t) => t.profileId.equals(profileId))
+            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          .watch();
+
+  Future<int> deleteTag({required int profileId, required int id}) =>
+      (_db.delete(_db.tags)
+            ..where((t) => t.profileId.equals(profileId) & t.id.equals(id)))
+          .go();
+
+  Future<int> _getOrCreateTagId(
+      {required int profileId, required String name}) {
+    final entry = TagsCompanion.insert(profileId: profileId, name: name);
+    return _db.into(_db.tags).insert(
+          entry,
+          onConflict:
+              DoUpdate((_) => entry, target: [_db.tags.profileId, _db.tags.name]),
+        );
+  }
+
+  /// Replaces the tags on a budget entry with exactly [tagNames] — creating
+  /// any that don't exist yet, reusing the rest. Blank names are dropped.
+  Future<void> setEntryTags({
+    required int profileId,
+    required int entryId,
+    required List<String> tagNames,
+  }) async {
+    final names = {
+      for (final n in tagNames.map((n) => n.trim())) if (n.isNotEmpty) n
+    };
+    await _db.transaction(() async {
+      await (_db.delete(_db.budgetEntryTags)
+            ..where((t) => t.entryId.equals(entryId)))
+          .go();
+      for (final name in names) {
+        final tagId = await _getOrCreateTagId(profileId: profileId, name: name);
+        await _db.into(_db.budgetEntryTags).insert(
+              BudgetEntryTagsCompanion.insert(entryId: entryId, tagId: tagId),
+              mode: InsertMode.insertOrIgnore,
+            );
+      }
+    });
+  }
+
+  /// Tag names per budget entry, for showing chips in a list without an
+  /// N+1 query per row. Re-emits whenever a tag or a link changes.
+  Stream<Map<int, List<String>>> watchEntryTagNames({required int profileId}) {
+    final query = _db.select(_db.budgetEntryTags).join([
+      innerJoin(_db.tags, _db.tags.id.equalsExp(_db.budgetEntryTags.tagId)),
+    ])
+      ..where(_db.tags.profileId.equals(profileId));
+    return query.watch().map((rows) {
+      final map = <int, List<String>>{};
+      for (final row in rows) {
+        final link = row.readTable(_db.budgetEntryTags);
+        final tag = row.readTable(_db.tags);
+        map.putIfAbsent(link.entryId, () => []).add(tag.name);
+      }
+      return map;
+    });
+  }
+
+  // ---- Recurring transfers ----
+  //
+  // A recurring transfer moves money between two of your own accounts on a
+  // schedule (e.g. $200 checking -> savings every month). It is neither
+  // income nor spending, so it never creates a BudgetEntries row — only the
+  // two account balances change, plus a TransferLogs row for history and to
+  // stop the same date from ever running twice.
+
+  Stream<List<RecurringTransfer>> watchRecurringTransfers(
+          {required int profileId}) =>
+      (_db.select(_db.recurringTransfers)
+            ..where((t) => t.profileId.equals(profileId))
+            ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          .watch();
+
+  Future<int> upsertRecurringTransfer(RecurringTransfersCompanion entry) =>
+      _db.into(_db.recurringTransfers).insertOnConflictUpdate(entry);
+
+  Future<int> deleteRecurringTransfer(
+          {required int profileId, required int id}) =>
+      (_db.delete(_db.recurringTransfers)
+            ..where((t) => t.profileId.equals(profileId) & t.id.equals(id)))
+          .go();
+
+  /// Recent executed transfers, newest first, for a simple history list.
+  Stream<List<TransferLog>> watchTransferHistory(
+          {required int profileId, int limit = 20}) =>
+      (_db.select(_db.transferLogs)
+            ..where((l) => l.profileId.equals(profileId))
+            ..orderBy([(l) => OrderingTerm.desc(l.date)])
+            ..limit(limit))
+          .watch();
+
+  /// Everything that has moved money through one account: entries linked to
+  /// it directly, plus any recurring transfer naming it as either side —
+  /// the closest thing to a bank's own "recent activity" list. Newest
+  /// first. [amountCents] is signed the way it actually moved the balance,
+  /// so a withdrawal or an outgoing transfer is always negative.
+  Stream<List<AccountActivity>> watchAccountHistory({
+    required int profileId,
+    required int accountId,
+  }) {
+    final entries = (_db.select(_db.budgetEntries)
+          ..where((e) =>
+              e.profileId.equals(profileId) & e.accountId.equals(accountId)))
+        .watch();
+    final transfers = (_db.select(_db.transferLogs).join([
+      innerJoin(
+        _db.recurringTransfers,
+        _db.recurringTransfers.id.equalsExp(_db.transferLogs.transferId),
+      ),
+    ])
+          ..where(_db.transferLogs.profileId.equals(profileId) &
+              (_db.recurringTransfers.fromAccountId.equals(accountId) |
+                  _db.recurringTransfers.toAccountId.equals(accountId))))
+        .watch();
+
+    return combineLatest<dynamic>([entries, transfers]).map((data) {
+      final entryRows = data[0] as List<BudgetEntry>;
+      final transferRows = data[1] as List<TypedResult>;
+      final activity = <AccountActivity>[
+        for (final e in entryRows)
+          (
+            date: e.date,
+            label: e.description ?? e.category,
+            amountCents:
+                e.type == EntryType.income ? e.amountCents : -e.amountCents,
+            kind: e.type == EntryType.income
+                ? AccountActivityKind.income
+                : AccountActivityKind.expense,
+          ),
+        for (final row in transferRows)
+          () {
+            final log = row.readTable(_db.transferLogs);
+            final transfer = row.readTable(_db.recurringTransfers);
+            final outgoing = transfer.fromAccountId == accountId;
+            return (
+              date: log.date,
+              label: transfer.name,
+              amountCents: outgoing ? -log.amountCents : log.amountCents,
+              kind: outgoing
+                  ? AccountActivityKind.transferOut
+                  : AccountActivityKind.transferIn,
+            );
+          }(),
+      ];
+      activity.sort((a, b) => b.date.compareTo(a.date));
+      return activity;
+    });
+  }
+
+  /// Every entry charged to or credited from one card, newest first — cards
+  /// have no transfers of their own, so this is simpler than
+  /// [watchAccountHistory].
+  Stream<List<AccountActivity>> watchCardHistory({
+    required int profileId,
+    required int cardId,
+  }) {
+    return (_db.select(_db.budgetEntries)
+          ..where((e) =>
+              e.profileId.equals(profileId) & e.cardId.equals(cardId))
+          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+        .watch()
+        .map((rows) => [
+              for (final e in rows)
+                (
+                  date: e.date,
+                  label: e.description ?? e.category,
+                  amountCents: e.type == EntryType.expense
+                      ? e.amountCents
+                      : -e.amountCents,
+                  kind: e.type == EntryType.expense
+                      ? AccountActivityKind.expense
+                      : AccountActivityKind.income,
+                ),
+            ]);
+  }
+
+  /// Moves money between two accounts once, right now — for a manual,
+  /// unscheduled transfer rather than a recurring one. It is stored as a
+  /// [RecurringTransfers] row created already inactive, so it shows up in
+  /// the same history as a scheduled transfer without [materializeDueTransfers]
+  /// ever mistaking it for one that recurs.
+  Future<void> postManualTransfer({
+    required int profileId,
+    required int fromAccountId,
+    required int toAccountId,
+    required int amountCents,
+    required DateTime date,
+    required String name,
+  }) async {
+    await _db.transaction(() async {
+      final transferId = await _db.into(_db.recurringTransfers).insert(
+            RecurringTransfersCompanion.insert(
+              profileId: profileId,
+              name: name,
+              fromAccountId: fromAccountId,
+              toAccountId: toAccountId,
+              amountCents: amountCents,
+              frequency: PayFrequency.monthly,
+              anchorDate: date,
+              active: const Value(false),
+            ),
+          );
+      await _db.into(_db.transferLogs).insert(TransferLogsCompanion.insert(
+            profileId: profileId,
+            transferId: transferId,
+            date: date,
+            amountCents: amountCents,
+          ));
+      await _adjustAccountBalance(fromAccountId, -amountCents);
+      await _adjustAccountBalance(toAccountId, amountCents);
+    });
+    await recordNetWorthSnapshot(profileId: profileId);
+  }
+
+  /// Executes any transfer occurrences due through today that haven't run
+  /// yet. Idempotent: a date already in [TransferLogs] is skipped, so this
+  /// is safe to call on every app launch alongside paycheck and autopay
+  /// processing.
+  Future<void> materializeDueTransfers(
+      {required int profileId, DateTime? now}) async {
+    final today = () {
+      final n = now ?? DateTime.now();
+      return DateTime(n.year, n.month, n.day);
+    }();
+    final transfers = await (_db.select(_db.recurringTransfers)
+          ..where(
+              (t) => t.profileId.equals(profileId) & t.active.equals(true)))
+        .get();
+    for (final transfer in transfers) {
+      final already = await (_db.select(_db.transferLogs)
+            ..where((l) => l.transferId.equals(transfer.id)))
+          .get();
+      final have = already.map((l) => l.date).toSet();
+      for (final date
+          in _occurrencesFor(transfer.anchorDate, transfer.frequency, today)) {
+        if (have.contains(date)) continue;
+        await _db.transaction(() async {
+          await _db.into(_db.transferLogs).insert(TransferLogsCompanion.insert(
+                profileId: profileId,
+                transferId: transfer.id,
+                date: date,
+                amountCents: transfer.amountCents,
+              ));
+          await _adjustAccountBalance(transfer.fromAccountId, -transfer.amountCents);
+          await _adjustAccountBalance(transfer.toAccountId, transfer.amountCents);
+        });
+      }
+    }
+    await recordNetWorthSnapshot(profileId: profileId);
+  }
+
+  Future<void> _adjustAccountBalance(int accountId, int deltaCents) async {
+    final account = await (_db.select(_db.accounts)
+          ..where((a) => a.id.equals(accountId)))
+        .getSingleOrNull();
+    if (account == null) return;
+    await (_db.update(_db.accounts)..where((a) => a.id.equals(accountId)))
+        .write(AccountsCompanion(
+            balanceCents: Value(account.balanceCents + deltaCents)));
+  }
+
+  Future<void> _adjustCardBalance(int cardId, int deltaCents) async {
+    final card = await (_db.select(_db.creditCards)
+          ..where((c) => c.id.equals(cardId)))
+        .getSingleOrNull();
+    if (card == null) return;
+    await (_db.update(_db.creditCards)..where((c) => c.id.equals(cardId)))
+        .write(CreditCardsCompanion(
+            balanceCents: Value(card.balanceCents + deltaCents)));
+  }
+
+  // ---- Projected cash balance ----
+
+  /// A day-by-day projection of total cash (checking, savings and cash
+  /// accounts — the money you can actually spend) starting from today's
+  /// real balance, walking forward using what is already scheduled:
+  /// paychecks and bills. This is not a prediction of unplanned spending —
+  /// only what Granary already knows is coming.
+  ///
+  /// Bills never touch an account's balance automatically anywhere in
+  /// Granary (balances are always edited by hand or by a logged payment),
+  /// so there is no risk of double-counting a bill that has already been
+  /// marked paid this month — its cash effect only ever shows up here.
+  Future<List<({DateTime date, int balanceCents})>> projectCashFlow({
+    required int profileId,
+    int days = 60,
+    DateTime? now,
+  }) async {
+    final n = now ?? DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    final end = DateTime(today.year, today.month, today.day + days);
+
+    final accounts = await watchAccounts(profileId: profileId).first;
+    final startBalance = accounts
+        .where((a) => cashAccountTypes.contains(a.type))
+        .fold(0, (s, a) => s + a.balanceCents);
+
+    // One delta per calendar day: paychecks add, bills subtract.
+    final deltas = <DateTime, int>{};
+
+    final paychecks = await watchPaychecks(profileId: profileId).first;
+    for (final p in paychecks) {
+      final date = DateTime(p.date.year, p.date.month, p.date.day);
+      if (date.isBefore(today) || date.isAfter(end)) continue;
+      deltas[date] = (deltas[date] ?? 0) + p.amountCents + p.bonusCents;
+    }
+
+    final bills = await watchBills(profileId: profileId).first;
+    var month = DateTime(today.year, today.month);
+    while (!month.isAfter(end)) {
+      for (final bill in bills) {
+        if (!billFallsIn(bill, month)) continue;
+        final date = dayInMonth(month.year, month.month, bill.dueDay);
+        if (date.isBefore(today) || date.isAfter(end)) continue;
+        deltas[date] = (deltas[date] ?? 0) - bill.amountCents;
+      }
+      month = DateTime(month.year, month.month + 1);
+    }
+
+    final points = <({DateTime date, int balanceCents})>[];
+    var running = startBalance;
+    for (var i = 0; i <= days; i++) {
+      final date = DateTime(today.year, today.month, today.day + i);
+      running += deltas[date] ?? 0;
+      points.add((date: date, balanceCents: running));
+    }
+    return points;
+  }
 }

@@ -10,7 +10,7 @@ import 'reminder.dart';
 ///
 /// The reason is platform behaviour. On Linux the notification daemon has no
 /// concept of a scheduled notification that survives the app exiting, so
-/// anything "scheduled" would only fire while Homebase happens to be open.
+/// anything "scheduled" would only fire while Granary happens to be open.
 /// Showing on launch is honest about that, and the in-app reminders panel on
 /// the dashboard is the reliable surface either way.
 class NotificationService {

@@ -53,7 +53,7 @@ class _PaychecksScreenState extends ConsumerState<PaychecksScreen> {
                 info: InfoButton(
                   title: 'Paycheck schedules',
                   body: [
-                    'Set a schedule once and Homebase generates the '
+                    'Set a schedule once and Granary generates the '
                         'individual paychecks for you, 90 days ahead, so '
                         'you never type a payday date twice.',
                     'Weekly is every 7 days and bi-weekly every 14 days, '

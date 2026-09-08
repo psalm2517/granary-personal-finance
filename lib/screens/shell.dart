@@ -7,16 +7,15 @@ import '../data/repository.dart';
 import '../main.dart';
 import '../theme/catppuccin.dart';
 import '../theme/flavor_provider.dart';
-import 'accounts.dart';
+import 'accounts_hub.dart';
 import 'bills.dart';
 import 'budget.dart';
-import 'cards.dart';
 import 'dashboard.dart';
 import 'goals.dart';
-import 'loans.dart';
 import 'paychecks.dart';
 import 'profiles.dart';
 import 'settings.dart';
+import 'transactions.dart';
 
 /// Desktop shell: NavigationRail sidebar + content. Only admins see the
 /// profile switcher; non-admins have no indication other profiles exist.
@@ -47,8 +46,10 @@ class _AppShellState extends ConsumerState<AppShell> {
       await repo.materializeReceivedPaychecks(profileId: profileId);
       await repo.materializeAutopayPayments(
           profileId: profileId, month: now);
+      await repo.materializeDueTransfers(profileId: profileId, now: now);
       // A point for today even on a day with no edits.
       await repo.recordNetWorthSnapshot(profileId: profileId);
+      await repo.recordAccountSnapshotsForToday(profileId: profileId);
 
       // Nudge about anything due soon. The dashboard panel is the reliable
       // surface; this is the extra desktop/phone notification on top.
@@ -69,10 +70,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     final titles = [
       'Dashboard',
       'Accounts',
-      'Cards',
-      'Loans',
       'Bills',
       'Budget',
+      'Transactions',
       'Paychecks',
       'Goals',
       'Settings',
@@ -82,11 +82,10 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final pages = [
       const DashboardScreen(),
-      const AccountsScreen(),
-      const CardsScreen(),
-      const LoansScreen(),
+      const AccountsHubScreen(),
       const BillsScreen(),
       const BudgetScreen(),
+      const TransactionsScreen(),
       const PaychecksScreen(),
       const GoalsScreen(),
       const SettingsScreen(),
@@ -134,14 +133,6 @@ class _AppShellState extends ConsumerState<AppShell> {
                   selectedIcon: Icon(Icons.account_balance),
                   label: Text('Accounts')),
               const NavigationRailDestination(
-                  icon: Icon(Icons.credit_card_outlined),
-                  selectedIcon: Icon(Icons.credit_card),
-                  label: Text('Cards')),
-              const NavigationRailDestination(
-                  icon: Icon(Icons.request_quote_outlined),
-                  selectedIcon: Icon(Icons.request_quote),
-                  label: Text('Loans')),
-              const NavigationRailDestination(
                   icon: Icon(Icons.receipt_long_outlined),
                   selectedIcon: Icon(Icons.receipt_long),
                   label: Text('Bills')),
@@ -149,6 +140,10 @@ class _AppShellState extends ConsumerState<AppShell> {
                   icon: Icon(Icons.pie_chart_outline),
                   selectedIcon: Icon(Icons.pie_chart),
                   label: Text('Budget')),
+              const NavigationRailDestination(
+                  icon: Icon(Icons.swap_horiz_outlined),
+                  selectedIcon: Icon(Icons.swap_horiz),
+                  label: Text('Transactions')),
               const NavigationRailDestination(
                   icon: Icon(Icons.payments_outlined),
                   selectedIcon: Icon(Icons.payments),

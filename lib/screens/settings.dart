@@ -6,6 +6,7 @@ import '../data/backup.dart';
 import '../widgets/backup_actions.dart';
 import '../data/database.dart';
 import '../main.dart';
+import '../theme/accent_provider.dart';
 import '../theme/catppuccin.dart';
 import '../theme/flavor_provider.dart';
 import '../widgets/common.dart';
@@ -27,6 +28,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final loggedIn = ref.watch(loggedInProfileProvider)!;
     final flavor = ref.watch(flavorProvider);
+    final accent = ref.watch(accentProvider);
     final scheme = Theme.of(context).colorScheme;
 
     return ListView(
@@ -37,7 +39,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             info: const InfoButton(
               title: 'Catppuccin flavors',
               body: [
-                'Homebase uses the Catppuccin palette, which comes in four '
+                'Granary uses the Catppuccin palette, which comes in four '
                     'flavors: Latte is the light one, and Frappé, Macchiato '
                     'and Mocha get progressively darker and higher contrast.',
                 'Colours come from the official Catppuccin package rather '
@@ -112,25 +114,66 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           ),
         ),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            title: const Text('Accent color'),
+            subtitle: Text(
+                'Applies to buttons, selection and highlights in every '
+                'flavor.'),
+            trailing: DropdownButton<CatppuccinAccent>(
+              value: accent,
+              underline: const SizedBox.shrink(),
+              onChanged: (chosen) {
+                if (chosen != null) {
+                  ref.read(accentProvider.notifier).select(chosen);
+                }
+              },
+              items: [
+                for (final a in CatppuccinAccent.values)
+                  DropdownMenuItem(
+                    value: a,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: a.of(flavor.palette),
+                            shape: BoxShape.circle,
+                            border:
+                                Border.all(color: flavor.palette.surface1),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(a.label),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
         kSectionGap,
         SectionHeader('Backup',
             icon: Icons.save_outlined,
             info: InfoButton(
               title: 'How backups work',
               body: [
-                'Homebase keeps everything on this computer — there is no '
+                'Granary keeps everything on this computer — there is no '
                     'cloud and nothing is uploaded. A backup writes a file '
                     'wherever you choose, and looking after that file is up '
                     'to you: another drive, or a folder you sync yourself.',
                 'The file is JSON, so it is readable and can be checked or '
                     'repaired by hand if it ever comes to that. It records '
                     'the schema version it came from, so an older backup can '
-                    'still be understood after Homebase changes.',
+                    'still be understood after Granary changes.',
                 loggedIn.isAdmin
                     ? 'As an admin, your backup covers every profile in the '
                         'household.'
                     : 'Your backup covers your own data only.',
-                'Restoring replaces what is there. Homebase copies the '
+                'Restoring replaces what is there. Granary copies the '
                     'current database next to itself first, so a mistaken '
                     'restore can still be undone by hand.',
               ],
@@ -195,7 +238,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final loggedIn = ref.read(loggedInProfileProvider)!;
 
     final file = await openFile(acceptedTypeGroups: const [
-      XTypeGroup(label: 'Homebase Money backup', extensions: ['json']),
+      XTypeGroup(label: 'Granary backup', extensions: ['json']),
     ]);
     if (file == null) return;
 

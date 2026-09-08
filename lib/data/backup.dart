@@ -35,7 +35,7 @@ class BackupException implements Exception {
   String toString() => message;
 }
 
-/// Exports and restores Homebase data as JSON.
+/// Exports and restores Granary data as JSON.
 ///
 /// JSON rather than a copy of the SQLite file for three reasons: it can be
 /// scoped to one profile (the file cannot, since tables are not partitioned
@@ -54,24 +54,75 @@ class BackupService {
   /// Tables in dependency order: parents before children. Restoring walks
   /// this forwards and deletes walk it backwards, so foreign keys hold at
   /// every step.
-  List<({String name, TableInfo table})> get _tables => [
-        (name: 'profiles', table: _db.profiles),
-        (name: 'accounts', table: _db.accounts),
-        (name: 'creditCards', table: _db.creditCards),
-        (name: 'loans', table: _db.loans),
-        (name: 'bills', table: _db.bills),
-        (name: 'billPayments', table: _db.billPayments),
-        (name: 'paycheckSchedules', table: _db.paycheckSchedules),
-        (name: 'paychecks', table: _db.paychecks),
-        (name: 'paycheckAllocations', table: _db.paycheckAllocations),
-        (name: 'budgetEntries', table: _db.budgetEntries),
-        (name: 'budgetTargets', table: _db.budgetTargets),
-        (name: 'categoryRules', table: _db.categoryRules),
-        (name: 'creditScoreSnapshots', table: _db.creditScoreSnapshots),
-        (name: 'payments', table: _db.payments),
-        (name: 'netWorthSnapshots', table: _db.netWorthSnapshots),
-        (name: 'goals', table: _db.goals),
-      ];
+  ///
+  /// [where] builds the SQL condition that scopes a table's rows to a set
+  /// of profile ids, given the comma-joined id list — almost always
+  /// `profile_id IN (ids)`, `id IN (ids)` for the profiles table itself,
+  /// and a subquery through `budget_entries` for `budgetEntryTags` and
+  /// `transactionSplits`, neither of which has a profile_id column of its
+  /// own at all.
+  List<({String name, TableInfo table, String Function(String ids) where})>
+      get _tables {
+    String byProfileId(String ids) => 'profile_id IN ($ids)';
+    return [
+      (name: 'profiles', table: _db.profiles, where: (ids) => 'id IN ($ids)'),
+      (name: 'accounts', table: _db.accounts, where: byProfileId),
+      (
+        name: 'accountBalanceSnapshots',
+        table: _db.accountBalanceSnapshots,
+        where: byProfileId,
+      ),
+      (name: 'creditCards', table: _db.creditCards, where: byProfileId),
+      (name: 'loans', table: _db.loans, where: byProfileId),
+      (name: 'bills', table: _db.bills, where: byProfileId),
+      (name: 'billPayments', table: _db.billPayments, where: byProfileId),
+      (
+        name: 'paycheckSchedules',
+        table: _db.paycheckSchedules,
+        where: byProfileId,
+      ),
+      (name: 'paychecks', table: _db.paychecks, where: byProfileId),
+      (
+        name: 'paycheckAllocations',
+        table: _db.paycheckAllocations,
+        where: byProfileId,
+      ),
+      (name: 'budgetEntries', table: _db.budgetEntries, where: byProfileId),
+      (
+        name: 'transactionSplits',
+        table: _db.transactionSplits,
+        where: (ids) => 'entry_id IN '
+            '(SELECT id FROM budget_entries WHERE profile_id IN ($ids))',
+      ),
+      (name: 'tags', table: _db.tags, where: byProfileId),
+      (
+        name: 'budgetEntryTags',
+        table: _db.budgetEntryTags,
+        where: (ids) => 'entry_id IN '
+            '(SELECT id FROM budget_entries WHERE profile_id IN ($ids))',
+      ),
+      (name: 'budgetTargets', table: _db.budgetTargets, where: byProfileId),
+      (name: 'categoryRules', table: _db.categoryRules, where: byProfileId),
+      (
+        name: 'creditScoreSnapshots',
+        table: _db.creditScoreSnapshots,
+        where: byProfileId,
+      ),
+      (name: 'payments', table: _db.payments, where: byProfileId),
+      (
+        name: 'netWorthSnapshots',
+        table: _db.netWorthSnapshots,
+        where: byProfileId,
+      ),
+      (name: 'goals', table: _db.goals, where: byProfileId),
+      (
+        name: 'recurringTransfers',
+        table: _db.recurringTransfers,
+        where: byProfileId,
+      ),
+      (name: 'transferLogs', table: _db.transferLogs, where: byProfileId),
+    ];
+  }
 
   /// Serializes every row visible to [profileIds]. Passing a single id is
   /// what a non-admin export does; an admin backing up the household passes
@@ -83,8 +134,7 @@ class BackupService {
       final rows = await _db
           .customSelect(
             'SELECT * FROM ${entry.table.actualTableName} '
-            'WHERE ${entry.name == 'profiles' ? 'id' : 'profile_id'} '
-            'IN (${profileIds.join(',')})',
+            'WHERE ${entry.where(profileIds.join(','))}',
             readsFrom: {entry.table},
           )
           .get();
@@ -94,7 +144,7 @@ class BackupService {
     final profileRows = (data['profiles'] as List).cast<Map<String, Object?>>();
 
     return const JsonEncoder.withIndent('  ').convert({
-      'homebase': {
+      'granary': {
         'formatVersion': formatVersion,
         'schemaVersion': _db.schemaVersion,
         'exportedAt': DateTime.now().toIso8601String(),
@@ -116,17 +166,20 @@ class BackupService {
       throw BackupException('That file is not valid JSON.');
     }
 
-    final header = decoded['homebase'];
+    // Older backups (written before the Granary rename) carry the header
+    // under the old key — still readable, so renaming the app doesn't
+    // strand anyone's existing backup file.
+    final header = decoded['granary'] ?? decoded['homebase'];
     final data = decoded['data'];
     if (header is! Map || data is! Map) {
       throw BackupException(
-          'That does not look like a Homebase backup file.');
+          'That does not look like a Granary backup file.');
     }
     final format = header['formatVersion'];
     if (format is! int || format > formatVersion) {
       throw BackupException(
-          'This backup was written by a newer version of Homebase '
-          '(format $format). Update Homebase and try again.');
+          'This backup was written by a newer version of Granary '
+          '(format $format). Update Granary and try again.');
     }
 
     final profiles = (header['profiles'] as List? ?? [])
@@ -164,7 +217,7 @@ class BackupService {
     if (summary.schemaVersion > _db.schemaVersion) {
       throw BackupException(
           'This backup came from a newer database (v${summary.schemaVersion}) '
-          'than this copy of Homebase understands (v${_db.schemaVersion}).');
+          'than this copy of Granary understands (v${_db.schemaVersion}).');
     }
 
     final decoded = jsonDecode(json) as Map<String, dynamic>;
@@ -180,21 +233,28 @@ class BackupService {
           'That backup does not contain data for this profile.');
     }
 
+    final ids = targetIds.join(',');
+
     await _db.transaction(() async {
       // Clear children before parents.
       for (final entry in _tables.reversed) {
-        final column = entry.name == 'profiles' ? 'id' : 'profile_id';
         await _db.customStatement(
           'DELETE FROM ${entry.table.actualTableName} '
-          'WHERE $column IN (${targetIds.join(',')})',
+          'WHERE ${entry.where(ids)}',
         );
       }
+
+      // budgetEntryTags and transactionSplits rows carry no profile id of
+      // their own — a row only belongs to a target profile if the entry it
+      // references does. Built once, right after budgetEntries rows are
+      // inserted below (it comes first in table order), then consulted when
+      // their turn comes.
+      final allowedEntryIds = <Object?>{};
 
       // Then insert parents before children.
       for (final entry in _tables) {
         final rows =
             (data[entry.name] as List? ?? []).cast<Map<String, dynamic>>();
-        final idColumn = entry.name == 'profiles' ? 'id' : 'profile_id';
         // Only write columns this version of the table actually has. A
         // backup from an older schema can carry columns since renamed or
         // dropped (statement_day became statement_close_day), and inserting
@@ -202,9 +262,14 @@ class BackupService {
         // column that no longer matters.
         final known = {for (final c in entry.table.$columns) c.name};
         for (final row in rows) {
-          if (!targetIds.contains(row[idColumn])) continue;
-          final columns =
-              row.keys.where(known.contains).toList();
+          final idColumn = entry.name == 'profiles' ? 'id' : 'profile_id';
+          final belongs = entry.name == 'budgetEntryTags' ||
+                  entry.name == 'transactionSplits'
+              ? allowedEntryIds.contains(row['entry_id'])
+              : targetIds.contains(row[idColumn]);
+          if (!belongs) continue;
+          if (entry.name == 'budgetEntries') allowedEntryIds.add(row['id']);
+          final columns = row.keys.where(known.contains).toList();
           final placeholders = List.filled(columns.length, '?').join(', ');
           await _db.customInsert(
             'INSERT INTO ${entry.table.actualTableName} '

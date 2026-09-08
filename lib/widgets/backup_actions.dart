@@ -20,9 +20,9 @@ Future<bool> runBackupFlow(
   final stamp = DateTime.now().toIso8601String().split('T').first;
 
   final location = await getSaveLocation(
-    suggestedName: suggestedName ?? 'homebase-backup-$stamp.json',
+    suggestedName: suggestedName ?? 'granary-backup-$stamp.json',
     acceptedTypeGroups: const [
-      XTypeGroup(label: 'Homebase Money backup', extensions: ['json']),
+      XTypeGroup(label: 'Granary backup', extensions: ['json']),
     ],
   );
   if (location == null) return false;

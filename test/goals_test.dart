@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:homebase_money/data/database.dart';
-import 'package:homebase_money/data/repository.dart';
+import 'package:granary/data/database.dart';
+import 'package:granary/data/repository.dart';
 
 void main() {
   late AppDatabase db;
@@ -107,6 +107,33 @@ void main() {
     expect(await repo.watchGoals(profileId: profileId).first, isEmpty);
   });
 
+  test('deleting the linked account clears the link but keeps its balance '
+      'as the manual progress', () async {
+    final accountId = await repo.upsertAccount(AccountsCompanion.insert(
+      profileId: profileId,
+      name: 'Savings',
+      type: AccountType.savings,
+      balanceCents: const Value(420000),
+    ));
+    final goalId = await addGoal(current: 0);
+    await repo.upsertGoal(GoalsCompanion(
+      id: Value(goalId),
+      profileId: Value(profileId),
+      name: const Value('Emergency fund'),
+      type: const Value(GoalType.savings),
+      targetAmountCents: const Value(1000000),
+      accountId: Value(accountId),
+    ));
+
+    await repo.deleteAccount(profileId: profileId, id: accountId);
+
+    final goal = (await repo.watchGoals(profileId: profileId).first).single;
+    expect(goal.accountId, isNull,
+        reason: 'the account is gone, so the link cannot point anywhere');
+    expect(goal.currentAmountCents, 420000,
+        reason: "the account's last balance survives as a manual number");
+  });
+
   group('monthly needed to land on time', () {
     Goal goalWith(
             {required int target,
@@ -172,6 +199,18 @@ void main() {
       final monthly = HomebaseRepository.monthlyNeededFor(goal,
           now: DateTime(2026, 8, 15))!;
       expect(monthly * 3, greaterThanOrEqualTo(100001));
+    });
+
+    test('currentCents overrides the stored column, for account-linked '
+        'goals', () {
+      // The stored column says 0, but the linked account actually has
+      // 300000 — the override should be what the math uses.
+      final goal = goalWith(
+          target: 600000, current: 0, date: DateTime(2027, 2, 1));
+      expect(
+          HomebaseRepository.monthlyNeededFor(goal,
+              now: DateTime(2026, 8, 15), currentCents: 300000),
+          50000);
     });
   });
 }

@@ -171,7 +171,7 @@ class _ProfilesScreenState extends ConsumerState<ProfilesScreen> {
           ref,
           profileIds: [p.id],
           suggestedName:
-              'homebase-backup-${p.name.toLowerCase().replaceAll(' ', '-')}'
+              'granary-backup-${p.name.toLowerCase().replaceAll(' ', '-')}'
               '-${DateTime.now().toIso8601String().split('T').first}.json',
         );
         continue; // Re-ask, now showing that a backup exists.

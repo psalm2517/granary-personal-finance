@@ -4,43 +4,72 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../main.dart';
+import '../theme/catppuccin.dart';
 import '../util/money.dart';
 import '../widgets/common.dart';
+import '../widgets/transaction_history.dart';
 
 IconData accountIcon(AccountType type) => switch (type) {
-      AccountType.checking => Icons.account_balance_wallet_outlined,
-      AccountType.savings => Icons.savings_outlined,
-      AccountType.cash => Icons.payments_outlined,
-      AccountType.investment => Icons.trending_up,
-      AccountType.retirement => Icons.beach_access_outlined,
-      AccountType.other => Icons.account_balance_outlined,
-    };
+  AccountType.checking => Icons.account_balance_wallet_outlined,
+  AccountType.savings => Icons.savings_outlined,
+  AccountType.cash => Icons.payments_outlined,
+  AccountType.investment => Icons.trending_up,
+  AccountType.retirement => Icons.beach_access_outlined,
+  AccountType.other => Icons.account_balance_outlined,
+};
+
+/// A stable color per account type, so the same type reads as the same
+/// color everywhere — the list, the dropdowns, any future chart — rather
+/// than a plain icon that blends into the row.
+Color accountTypeColor(BuildContext context, AccountType type) {
+  final colors = Theme.of(context).extension<CategoryColors>()!;
+  return colors.forIndex(AccountType.values.indexOf(type));
+}
+
+/// Icon on a colored rounded-square badge (Needs, Wants, Savings…) instead
+/// of a plain icon sitting directly on the row background.
+Widget accountBadge(
+  BuildContext context,
+  AccountType type, {
+  double size = 36,
+}) {
+  final color = accountTypeColor(context, type);
+  return Container(
+    width: size,
+    height: size,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.18),
+      borderRadius: BorderRadius.circular(size * 0.28),
+    ),
+    child: Icon(accountIcon(type), color: color, size: size * 0.5),
+  );
+}
 
 String accountLabel(AccountType type) => switch (type) {
-      AccountType.checking => 'Checking',
-      AccountType.savings => 'Savings',
-      AccountType.cash => 'Cash',
-      AccountType.investment => 'Investment',
-      AccountType.retirement => 'Retirement',
-      AccountType.other => 'Other',
-    };
+  AccountType.checking => 'Checking',
+  AccountType.savings => 'Savings',
+  AccountType.cash => 'Cash',
+  AccountType.investment => 'Investment',
+  AccountType.retirement => 'Retirement',
+  AccountType.other => 'Other',
+};
 
 /// Plain-language guide to picking a type. The split that matters is tax
 /// treatment: retirement accounts are tax-advantaged and penalized for early
 /// withdrawal, investment accounts are ordinary taxable brokerages.
 String accountHint(AccountType type) => switch (type) {
-      AccountType.checking => 'Everyday spending account at a bank.',
-      AccountType.savings =>
-        'Savings, money market or high-yield savings account.',
-      AccountType.cash => 'Physical cash, or an app balance like Venmo.',
-      AccountType.investment =>
-        'Taxable brokerage you can withdraw from anytime — '
-            'individual or joint brokerage, crypto.',
-      AccountType.retirement =>
-        'Tax-advantaged and penalized before age 59½ — '
-            '401(k), 403(b), Roth IRA, Traditional IRA, HSA.',
-      AccountType.other => 'Anything else you count as an asset.',
-    };
+  AccountType.checking => 'Everyday spending account at a bank.',
+  AccountType.savings => 'Savings, money market or high-yield savings account.',
+  AccountType.cash => 'Physical cash, or an app balance like Venmo.',
+  AccountType.investment =>
+    'Taxable brokerage you can withdraw from anytime — '
+        'individual or joint brokerage, crypto.',
+  AccountType.retirement =>
+    'Tax-advantaged and penalized before age 59½ — '
+        '401(k), 403(b), Roth IRA, Traditional IRA, HSA.',
+  AccountType.other => 'Anything else you count as an asset.',
+};
 
 class AccountsScreen extends ConsumerWidget {
   const AccountsScreen({super.key});
@@ -100,7 +129,7 @@ class AccountsScreen extends ConsumerWidget {
                         'brokerage account is Investment. The difference is '
                         'the tax wrapper, not what you hold inside it — you '
                         'can own the same index fund in either one.',
-                    'These types only group and label accounts in Homebase. '
+                    'These types only group and label accounts in Granary. '
                         'All of them count as assets toward net worth.',
                   ],
                 ),
@@ -108,48 +137,28 @@ class AccountsScreen extends ConsumerWidget {
               kSectionGap,
               for (final type in AccountType.values)
                 if (byType[type] != null) ...[
-                  SectionHeader(accountLabel(type),
-                      icon: accountIcon(type),
-                      action: Text(
-                        fmtCents(byType[type]!
-                            .fold(0, (s, a) => s + a.balanceCents)),
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: scheme.onSurfaceVariant),
-                      )),
+                  SectionHeader(
+                    accountLabel(type),
+                    icon: accountIcon(type),
+                    iconColor: accountTypeColor(context, type),
+                    action: Text(
+                      fmtCents(
+                        byType[type]!.fold(0, (s, a) => s + a.balanceCents),
+                      ),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                   Card(
                     child: Column(
                       children: [
                         for (final a in byType[type]!)
-                          ListTile(
-                            leading: Icon(accountIcon(a.type)),
-                            title: Text(a.name),
-                            subtitle:
-                                a.institution == null || a.institution!.isEmpty
-                                    ? null
-                                    : Text(a.institution!),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(fmtCents(a.balanceCents),
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: a.balanceCents < 0
-                                            ? scheme.error
-                                            : null)),
-                                IconButton(
-                                    tooltip: 'Edit',
-                                    icon: const Icon(Icons.edit_outlined,
-                                        size: 18),
-                                    onPressed: () => _edit(context, ref, a)),
-                                IconButton(
-                                    tooltip: 'Delete',
-                                    icon: const Icon(Icons.delete_outline,
-                                        size: 18),
-                                    onPressed: () =>
-                                        _delete(context, ref, a)),
-                              ],
-                            ),
+                          _AccountRow(
+                            account: a,
+                            onEdit: () => _edit(context, ref, a),
+                            onDelete: () => _delete(context, ref, a),
                           ),
                       ],
                     ),
@@ -164,21 +173,27 @@ class AccountsScreen extends ConsumerWidget {
   }
 
   Future<void> _delete(
-      BuildContext context, WidgetRef ref, Account account) async {
+    BuildContext context,
+    WidgetRef ref,
+    Account account,
+  ) async {
     final profileId = ref.read(activeProfileProvider)!.id;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Delete ${account.name}?'),
         content: const Text(
-            'Transactions linked to this account stay, but lose the link.'),
+          'Transactions linked to this account stay, but lose the link.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           DangerButton(
-              label: 'Delete',
-              onPressed: () => Navigator.pop(context, true)),
+            label: 'Delete',
+            onPressed: () => Navigator.pop(context, true),
+          ),
         ],
       ),
     );
@@ -190,12 +205,16 @@ class AccountsScreen extends ConsumerWidget {
   }
 
   Future<void> _edit(
-      BuildContext context, WidgetRef ref, Account? existing) async {
+    BuildContext context,
+    WidgetRef ref,
+    Account? existing,
+  ) async {
     final profileId = ref.read(activeProfileProvider)!.id;
     final name = TextEditingController(text: existing?.name);
     final institution = TextEditingController(text: existing?.institution);
     final balance = TextEditingController(
-        text: existing == null ? '' : (existing.balanceCents / 100).toString());
+      text: existing == null ? '' : (existing.balanceCents / 100).toString(),
+    );
     var type = existing?.type ?? AccountType.checking;
 
     final saved = await showDialog<bool>(
@@ -204,45 +223,57 @@ class AccountsScreen extends ConsumerWidget {
         builder: (context, setLocal) => SubmitOnEnter(
           onSubmit: () => Navigator.pop(context, true),
           child: AlertDialog(
-          title: Text(existing == null ? 'Add account' : 'Edit account'),
-          content: SizedBox(
-            width: 380,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DialogField(name, 'Account name', autofocus: true),
-              DialogField(institution, 'Institution (optional)'),
-              DropdownButtonFormField<AccountType>(
-                initialValue: type,
-                decoration: InputDecoration(
-                    labelText: 'Type',
-                    helperText: accountHint(type),
-                    helperMaxLines: 3,
-                    border: const OutlineInputBorder()),
-                items: [
-                  for (final t in AccountType.values)
-                    DropdownMenuItem(
-                      value: t,
-                      child: Row(children: [
-                        Icon(accountIcon(t), size: 16),
-                        const SizedBox(width: 8),
-                        Text(accountLabel(t)),
-                      ]),
+            title: Text(existing == null ? 'Add account' : 'Edit account'),
+            content: SizedBox(
+              width: 380,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DialogField(name, 'Account name', autofocus: true),
+                  DialogField(institution, 'Institution (optional)'),
+                  DropdownButtonFormField<AccountType>(
+                    initialValue: type,
+                    decoration: InputDecoration(
+                      labelText: 'Type',
+                      helperText: accountHint(type),
+                      helperMaxLines: 3,
+                      border: const OutlineInputBorder(),
                     ),
+                    items: [
+                      for (final t in AccountType.values)
+                        DropdownMenuItem(
+                          value: t,
+                          child: Row(
+                            children: [
+                              Icon(
+                                accountIcon(t),
+                                size: 16,
+                                color: accountTypeColor(context, t),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(accountLabel(t)),
+                            ],
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => setLocal(() => type = v!),
+                  ),
+                  const SizedBox(height: 12),
+                  DialogField(balance, 'Current balance (\$)'),
                 ],
-                onChanged: (v) => setLocal(() => type = v!),
               ),
-              const SizedBox(height: 12),
-              DialogField(balance, 'Current balance (\$)'),
-            ]),
-          ),
-          actions: [
-            TextButton(
+            ),
+            actions: [
+              TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel')),
-            FilledButton(
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Save')),
-          ],
-        ),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -251,15 +282,96 @@ class AccountsScreen extends ConsumerWidget {
       if (context.mounted) warnNotSaved(context, 'the account needs a name');
       return;
     }
-    await ref.read(repositoryProvider).upsertAccount(AccountsCompanion(
-          id: existing == null ? const Value.absent() : Value(existing.id),
-          profileId: Value(profileId),
-          name: Value(name.text.trim()),
-          institution: Value(institution.text.trim().isEmpty
+    await ref
+        .read(repositoryProvider)
+        .upsertAccount(
+          AccountsCompanion(
+            id: existing == null ? const Value.absent() : Value(existing.id),
+            profileId: Value(profileId),
+            name: Value(name.text.trim()),
+            institution: Value(
+              institution.text.trim().isEmpty ? null : institution.text.trim(),
+            ),
+            type: Value(type),
+            balanceCents: Value(parseDollarsToCents(balance.text) ?? 0),
+          ),
+        );
+  }
+}
+
+/// One account row, with a 30-day sparkline of its balance history next to
+/// the current figure — the trend at a glance, not just the number.
+/// Expands into its full transaction history, the same way a card row does.
+class _AccountRow extends ConsumerWidget {
+  const _AccountRow({
+    required this.account,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Account account;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repo = ref.watch(repositoryProvider);
+    final scheme = Theme.of(context).colorScheme;
+    return StreamBuilder<List<AccountBalanceSnapshot>>(
+      stream: repo.watchAccountBalanceHistory(accountId: account.id),
+      builder: (context, snap) {
+        final history = snap.data ?? [];
+        return ExpansionTile(
+          leading: accountBadge(context, account.type),
+          title: Text(account.name),
+          subtitle: account.institution == null || account.institution!.isEmpty
               ? null
-              : institution.text.trim()),
-          type: Value(type),
-          balanceCents: Value(parseDollarsToCents(balance.text) ?? 0),
-        ));
+              : Text(account.institution!),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (history.length >= 2)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Sparkline(
+                    values: history.map((s) => s.balanceCents).toList(),
+                  ),
+                ),
+              Text(
+                fmtCents(account.balanceCents),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'monospace',
+                  color: account.balanceCents < 0 ? scheme.error : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.expand_more),
+            ],
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TransactionHistory(
+              stream: repo.watchAccountHistory(
+                  profileId: account.profileId, accountId: account.id),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit')),
+                TextButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete')),
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 }

@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:homebase_money/data/database.dart';
-import 'package:homebase_money/data/repository.dart';
+import 'package:granary/data/database.dart';
+import 'package:granary/data/repository.dart';
 
 void main() {
   late AppDatabase db;
@@ -69,20 +69,17 @@ void main() {
       profileId: profileId,
       name: 'Visa',
       creditLimitCents: 100000,
-      balanceCents: const Value(10000), // owed now
-      statementBalanceCents: const Value(40000), // reported
+      balanceCents: const Value(40000),
     ));
 
-    final suggested =
-        await repo.currentReportedUtilization(profileId: profileId);
+    final suggested = await repo.currentUtilization(profileId: profileId);
 
     expect(suggested, 0.40,
-        reason: 'prefill uses the reported balance, matching the dashboard, '
-            'not the \$100 currently owed');
+        reason: 'prefill matches the dashboard\'s utilization figure');
   });
 
   test('suggested utilization is zero with no cards', () async {
-    expect(await repo.currentReportedUtilization(profileId: profileId), 0);
+    expect(await repo.currentUtilization(profileId: profileId), 0);
   });
 
   test('deleting a profile removes its score history', () async {

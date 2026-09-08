@@ -47,12 +47,6 @@ class CreditCards extends Table {
   /// Day of month the payment is due, typically ~21-25 days after closing.
   IntColumn get paymentDueDay => integer().nullable()();
 
-  /// Balance as of the last statement close — the figure the issuer reports
-  /// to the credit bureaus. Utilization and anything credit-score related
-  /// uses this; everything about money actually owed uses [balanceCents].
-  IntColumn get statementBalanceCents =>
-      integer().withDefault(const Constant(0))();
-
   /// Minimum payment shown on the current statement, when known. The payoff
   /// simulator prefers this over its own estimate.
   IntColumn get minimumPaymentDueCents => integer().nullable()();
@@ -101,6 +95,23 @@ class NetWorthSnapshots extends Table {
       ];
 }
 
+/// Point-in-time record of a single account's balance, so a sparkline can
+/// show its recent trend. Written whenever the balance changes, at most
+/// once per day per account — the same pattern as [NetWorthSnapshots].
+class AccountBalanceSnapshots extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get profileId => integer().references(Profiles, #id)();
+  IntColumn get accountId =>
+      integer().references(Accounts, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get date => dateTime()();
+  IntColumn get balanceCents => integer()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {accountId, date},
+      ];
+}
+
 /// Saving toward something, or paying something off.
 enum GoalType { savings, payoff }
 
@@ -113,6 +124,11 @@ class Goals extends Table {
   IntColumn get currentAmountCents =>
       integer().withDefault(const Constant(0))();
   DateTimeColumn get targetDate => dateTime().nullable()();
+
+  /// When set, progress is read live from this account's balance instead of
+  /// the manually-entered [currentAmountCents] — e.g. a savings goal tied to
+  /// the real account it's funded from, so it never drifts out of sync.
+  IntColumn get accountId => integer().nullable().references(Accounts, #id)();
 }
 
 class Loans extends Table {
@@ -128,6 +144,9 @@ class Loans extends Table {
 /// How often a bill comes due.
 enum BillFrequency { monthly, quarterly, annual, oneTime }
 
+/// Which table [Bills.paymentSourceId] points into.
+enum PaymentSourceType { account, card }
+
 class Bills extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get profileId => integer().references(Profiles, #id)();
@@ -136,6 +155,17 @@ class Bills extends Table {
   IntColumn get dueDay => integer()(); // 1-31, clamped to month length
   TextColumn get frequency =>
       textEnum<BillFrequency>().withDefault(const Constant('monthly'))();
+
+  /// What the bill is paid with, e.g. a specific checking account or credit
+  /// card. When set, marking the bill paid moves real money: it comes off
+  /// an account's balance or onto a card's, the same as materializing it
+  /// via autopay does.
+  TextColumn get paymentSourceType => textEnum<PaymentSourceType>().nullable()();
+
+  /// Row id in Accounts or CreditCards, depending on [paymentSourceType].
+  /// Not a foreign key because it points at one of two tables; cleanup is
+  /// handled when an account or card is deleted.
+  IntColumn get paymentSourceId => integer().nullable()();
 
   /// If true, the bill is charged automatically. Once its due day passes it
   /// is treated as paid with no manual check-off, and it never shows the
@@ -191,8 +221,17 @@ class BudgetEntries extends Table {
   IntColumn get amountCents => integer()();
   TextColumn get type => textEnum<EntryType>()();
   TextColumn get description => text().nullable()(); // matched by CategoryRules
+  /// Who was paid or who paid you — separate from the free-text description,
+  /// so "top payees" can be totaled without parsing description text.
+  TextColumn get payee => text().nullable()();
   /// Which account the money moved through, when known.
   IntColumn get accountId => integer().nullable().references(Accounts, #id)();
+
+  /// Which card the money was charged to or credited from, when known.
+  /// Mutually exclusive with [accountId] in practice — the entry moves
+  /// through one or the other, never both.
+  IntColumn get cardId =>
+      integer().nullable().references(CreditCards, #id)();
 
   /// Set when this entry was generated automatically because a paycheck was
   /// marked received — keeps the two in sync instead of double-entry.
@@ -204,6 +243,20 @@ class BudgetEntries extends Table {
   IntColumn get sourceBillPaymentId => integer()
       .nullable()
       .references(BillPayments, #id, onDelete: KeyAction.cascade)();
+}
+
+/// One slice of a split transaction — e.g. a single $150 store run entered
+/// as $100 groceries + $50 household. When an entry has splits, the splits'
+/// categories are what is shown and counted per-category; the parent
+/// entry's own [BudgetEntries.category] is left as a fallback for display
+/// contexts that do not know about splits.
+class TransactionSplits extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get profileId => integer().references(Profiles, #id)();
+  IntColumn get entryId => integer()
+      .references(BudgetEntries, #id, onDelete: KeyAction.cascade)();
+  TextColumn get category => text()();
+  IntColumn get amountCents => integer()();
 }
 
 /// Per-category monthly spending target for the budget screen.
@@ -287,6 +340,69 @@ class PaycheckAllocations extends Table {
   IntColumn get billId => integer().nullable().references(Bills, #id)();
 }
 
+/// A free-form label that can span multiple categories, for cross-cutting
+/// totals a category alone can't capture (e.g. "vacation2026").
+class Tags extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get profileId => integer().references(Profiles, #id)();
+  TextColumn get name => text().withLength(min: 1, max: 32)();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {profileId, name},
+      ];
+}
+
+/// Many-to-many: which tags apply to which budget entry.
+class BudgetEntryTags extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get entryId =>
+      integer().references(BudgetEntries, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId =>
+      integer().references(Tags, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {entryId, tagId},
+      ];
+}
+
+/// A recurring, automatic movement of money between two of your own
+/// accounts (e.g. $200 checking -> savings every month). This is not income
+/// or spending, so it never touches BudgetEntries — just the two balances.
+/// Deleting either account cascades into deleting the transfer: a transfer
+/// with only one side left cannot mean anything.
+class RecurringTransfers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get profileId => integer().references(Profiles, #id)();
+  TextColumn get name => text().withLength(min: 1, max: 64)();
+  IntColumn get fromAccountId =>
+      integer().references(Accounts, #id, onDelete: KeyAction.cascade)();
+  IntColumn get toAccountId =>
+      integer().references(Accounts, #id, onDelete: KeyAction.cascade)();
+  IntColumn get amountCents => integer()();
+  TextColumn get frequency => textEnum<PayFrequency>()();
+  DateTimeColumn get anchorDate => dateTime()();
+  BoolColumn get active => boolean().withDefault(const Constant(true))();
+}
+
+/// One row per transfer occurrence actually executed, so a schedule never
+/// double-moves money for a date it already ran, and there is a real history
+/// to show — the same pattern as [BillPayments] for bills.
+class TransferLogs extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get profileId => integer().references(Profiles, #id)();
+  IntColumn get transferId => integer()
+      .references(RecurringTransfers, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get date => dateTime()();
+  IntColumn get amountCents => integer()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {transferId, date},
+      ];
+}
+
 @DriftDatabase(tables: [
   Profiles,
   Accounts,
@@ -300,17 +416,23 @@ class PaycheckAllocations extends Table {
   CategoryRules,
   Payments,
   NetWorthSnapshots,
+  AccountBalanceSnapshots,
   Goals,
   PaycheckSchedules,
   Paychecks,
   PaycheckAllocations,
+  Tags,
+  BudgetEntryTags,
+  RecurringTransfers,
+  TransferLogs,
+  TransactionSplits,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -383,7 +505,12 @@ class AppDatabase extends _$AppDatabase {
               await m.renameColumn(
                   creditCards, 'statement_day', creditCards.statementCloseDay);
             }
-            await m.addColumn(creditCards, creditCards.statementBalanceCents);
+            // statement_balance_cents no longer exists as of v13 (see
+            // below), so it is added here with raw SQL rather than the
+            // typed column, which the current schema class has dropped.
+            await customStatement(
+                'ALTER TABLE credit_cards ADD COLUMN '
+                'statement_balance_cents INTEGER NOT NULL DEFAULT 0');
             await m.addColumn(
                 creditCards, creditCards.minimumPaymentDueCents);
             // Seed the statement balance from the current balance so
@@ -404,11 +531,52 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 4) {
+            // Every bills column added by a later step must exist before
+            // this rebuild runs, since it copies data using the table's
+            // current (newest) Dart column set.
+            await m.addColumn(bills, bills.paymentSourceType);
+            await m.addColumn(bills, bills.paymentSourceId);
             // Rebuild bills once, after every column addition (including
             // autopay above), to drop columns no longer in the schema:
             // paid_this_month (replaced by BillPayments) and recurring
             // (replaced by frequency).
             await m.alterTable(TableMigration(bills));
+          }
+          if (from < 12) {
+            await m.addColumn(budgetEntries, budgetEntries.payee);
+            // Anyone upgrading from before v10 gets goals.accountId for
+            // free: createTable above already used the current (v12) column
+            // set, so adding it again here would collide.
+            if (from >= 10) {
+              await m.addColumn(goals, goals.accountId);
+            }
+            await m.createTable(tags);
+            await m.createTable(budgetEntryTags);
+            await m.createTable(recurringTransfers);
+            await m.createTable(transferLogs);
+          }
+          if (from < 13) {
+            // Two dollar amounts for one card (current vs. reported to the
+            // bureaus) was more confusing than useful — utilization is now
+            // judged off the real balance instead.
+            await m.alterTable(TableMigration(creditCards));
+          }
+          if (from < 14) {
+            await m.createTable(accountBalanceSnapshots);
+          }
+          if (from < 15) {
+            // Upgraders from before v4 already gained these columns above,
+            // ahead of the bills rebuild that step performs.
+            if (from >= 4) {
+              await m.addColumn(bills, bills.paymentSourceType);
+              await m.addColumn(bills, bills.paymentSourceId);
+            }
+          }
+          if (from < 16) {
+            await m.createTable(transactionSplits);
+          }
+          if (from < 17) {
+            await m.addColumn(budgetEntries, budgetEntries.cardId);
           }
         },
         beforeOpen: (details) async {
@@ -419,36 +587,37 @@ class AppDatabase extends _$AppDatabase {
   /// Where the database file lives, or null when it is in memory.
   Future<String?> get databasePath async {
     final dir = await getApplicationSupportDirectory();
-    final file = File(p.join(dir.path, 'homebase.sqlite'));
+    final file = File(p.join(dir.path, 'granary.sqlite'));
     return file.existsSync() ? file.path : null;
   }
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
       final dir = await getApplicationSupportDirectory();
-      final file = File(p.join(dir.path, 'homebase.sqlite'));
+      final file = File(p.join(dir.path, 'granary.sqlite'));
       await _migrateFromRename(file);
       return NativeDatabase.createInBackground(file);
     });
   }
 
-  /// The application id has changed twice as the project was renamed
-  /// (homebase -> homebase_finance -> homebase_money), and on Linux and
-  /// Android that id decides where getApplicationSupportDirectory points.
-  /// Without this, a rename would look to the user like their data had been
-  /// wiped. Each previous directory is checked newest first, so an install
-  /// that skipped a rename still finds its database.
+  /// The app has been renamed three times (homebase -> homebase_finance ->
+  /// homebase_money -> granary), and on Linux and Android the application id
+  /// decides where getApplicationSupportDirectory points, and each rename
+  /// also renamed the database file itself. Without this, a rename would
+  /// look to the user like their data had been wiped. Each previous
+  /// directory is checked newest first, so an install that skipped a rename
+  /// still finds its database.
   static Future<void> _migrateFromRename(File newFile) async {
     if (newFile.existsSync()) return;
     try {
       final support = await getApplicationSupportDirectory();
-      const previousIds = [
-        'dev.homebase.homebase_finance',
-        'dev.homebase.homebase',
+      const previousDirs = [
+        ('dev.homebase.homebase_money', 'homebase.sqlite'),
+        ('dev.homebase.homebase_finance', 'homebase.sqlite'),
+        ('dev.homebase.homebase', 'homebase.sqlite'),
       ];
-      for (final id in previousIds) {
-        final oldFile =
-            File(p.join(support.parent.path, id, 'homebase.sqlite'));
+      for (final (id, filename) in previousDirs) {
+        final oldFile = File(p.join(support.parent.path, id, filename));
         if (!oldFile.existsSync()) continue;
         await newFile.parent.create(recursive: true);
         await oldFile.copy(newFile.path);

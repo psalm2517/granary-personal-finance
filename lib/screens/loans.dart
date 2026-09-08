@@ -75,39 +75,54 @@ class LoansScreen extends ConsumerWidget {
                             ? 0
                             : 1 - l.balanceCents / l.originalAmountCents,
                       ),
-                      trailing: Text(fmtCents(l.balanceCents)),
+                      trailing: Text(
+                        fmtCents(l.balanceCents),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       childrenPadding: const EdgeInsets.all(16),
                       expandedCrossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         DetailRow('Balance', fmtCents(l.balanceCents)),
                         DetailRow('Original', fmtCents(l.originalAmountCents)),
                         DetailRow('APR', '${l.apr.toStringAsFixed(2)}%'),
-                        DetailRow('Monthly payment',
-                            fmtCents(l.monthlyPaymentCents)),
+                        DetailRow(
+                          'Monthly payment',
+                          fmtCents(l.monthlyPaymentCents),
+                        ),
                         PaymentHistory(
-                            accountType: PaymentAccountType.loan,
-                            accountId: l.id),
+                          accountType: PaymentAccountType.loan,
+                          accountId: l.id,
+                        ),
                         const SizedBox(height: 8),
-                        Row(children: [
-                          TextButton.icon(
+                        Row(
+                          children: [
+                            TextButton.icon(
                               onPressed: () =>
                                   _logPayment(context, ref, [l], l),
                               icon: const Icon(Icons.payments_outlined),
-                              label: const Text('Pay')),
-                          FilledButton.tonalIcon(
+                              label: const Text('Pay'),
+                            ),
+                            FilledButton.tonalIcon(
                               onPressed: () => _whatIf(context, l),
                               icon: const Icon(Icons.query_stats),
-                              label: const Text('What if?')),
-                          const SizedBox(width: 8),
-                          TextButton.icon(
+                              label: const Text('What if?'),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton.icon(
                               onPressed: () => _edit(context, ref, l),
                               icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Edit')),
-                          TextButton.icon(
+                              label: const Text('Edit'),
+                            ),
+                            TextButton.icon(
                               onPressed: () => _delete(context, ref, l),
                               icon: const Icon(Icons.delete_outline),
-                              label: const Text('Delete')),
-                        ]),
+                              label: const Text('Delete'),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -138,25 +153,31 @@ class LoansScreen extends ConsumerWidget {
         ),
         actions: [
           FilledButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Done'),
+          ),
         ],
       ),
     );
   }
 
-  Future<void> _logPayment(BuildContext context, WidgetRef ref,
-      List<Loan> loans, Loan? preselect) async {
+  Future<void> _logPayment(
+    BuildContext context,
+    WidgetRef ref,
+    List<Loan> loans,
+    Loan? preselect,
+  ) async {
     final accounts = [
       for (final l in loans)
         PayableAccount(
-            type: PaymentAccountType.loan,
-            id: l.id,
-            name: l.name,
-            balanceCents: l.balanceCents,
-            suggestedCents: l.monthlyPaymentCents > 0
-                ? l.monthlyPaymentCents
-                : null),
+          type: PaymentAccountType.loan,
+          id: l.id,
+          name: l.name,
+          balanceCents: l.balanceCents,
+          suggestedCents: l.monthlyPaymentCents > 0
+              ? l.monthlyPaymentCents
+              : null,
+        ),
     ];
     final logged = await showQuickPaymentDialog(
       context,
@@ -167,8 +188,9 @@ class LoansScreen extends ConsumerWidget {
           : accounts.firstWhere((a) => a.id == preselect.id),
     );
     if (logged && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Payment logged and balance updated')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment logged and balance updated')),
+      );
     }
   }
 
@@ -180,11 +202,13 @@ class LoansScreen extends ConsumerWidget {
         title: Text('Delete ${l.name}?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           DangerButton(
-              label: 'Delete',
-              onPressed: () => Navigator.pop(context, true)),
+            label: 'Delete',
+            onPressed: () => Navigator.pop(context, true),
+          ),
         ],
       ),
     );
@@ -195,46 +219,58 @@ class LoansScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _edit(BuildContext context, WidgetRef ref, Loan? existing) async {
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Loan? existing,
+  ) async {
     final profileId = ref.read(activeProfileProvider)!.id;
     final name = TextEditingController(text: existing?.name);
     final balance = TextEditingController(
-        text: existing == null ? '' : (existing.balanceCents / 100).toString());
+      text: existing == null ? '' : (existing.balanceCents / 100).toString(),
+    );
     final original = TextEditingController(
-        text: existing == null
-            ? ''
-            : (existing.originalAmountCents / 100).toString());
+      text: existing == null
+          ? ''
+          : (existing.originalAmountCents / 100).toString(),
+    );
     final apr = TextEditingController(text: existing?.apr.toString() ?? '');
     final payment = TextEditingController(
-        text: existing == null
-            ? ''
-            : (existing.monthlyPaymentCents / 100).toString());
+      text: existing == null
+          ? ''
+          : (existing.monthlyPaymentCents / 100).toString(),
+    );
 
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => SubmitOnEnter(
         onSubmit: () => Navigator.pop(context, true),
         child: AlertDialog(
-        title: Text(existing == null ? 'Add loan' : 'Edit loan'),
-        content: SizedBox(
-          width: 360,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DialogField(name, 'Name', autofocus: true),
-            DialogField(balance, 'Balance (\$)'),
-            DialogField(original, 'Original amount (\$)'),
-            DialogField(apr, 'APR (%)'),
-            DialogField(payment, 'Monthly payment (\$)'),
-          ]),
-        ),
-        actions: [
-          TextButton(
+          title: Text(existing == null ? 'Add loan' : 'Edit loan'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DialogField(name, 'Name', autofocus: true),
+                DialogField(balance, 'Balance (\$)'),
+                DialogField(original, 'Original amount (\$)'),
+                DialogField(apr, 'APR (%)'),
+                DialogField(payment, 'Monthly payment (\$)'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          FilledButton(
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save')),
-        ],
-      ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
     if (saved != true) return;
@@ -242,17 +278,20 @@ class LoansScreen extends ConsumerWidget {
       if (context.mounted) warnNotSaved(context, 'the loan needs a name');
       return;
     }
-    await ref.read(repositoryProvider).upsertLoan(LoansCompanion(
-          id: existing == null ? const Value.absent() : Value(existing.id),
-          profileId: Value(profileId),
-          name: Value(name.text.trim()),
-          balanceCents: Value(parseDollarsToCents(balance.text) ?? 0),
-          originalAmountCents: Value(parseDollarsToCents(original.text) ?? 0),
-          apr: Value(double.tryParse(apr.text) ?? 0),
-          monthlyPaymentCents: Value(parseDollarsToCents(payment.text) ?? 0),
-        ));
+    await ref
+        .read(repositoryProvider)
+        .upsertLoan(
+          LoansCompanion(
+            id: existing == null ? const Value.absent() : Value(existing.id),
+            profileId: Value(profileId),
+            name: Value(name.text.trim()),
+            balanceCents: Value(parseDollarsToCents(balance.text) ?? 0),
+            originalAmountCents: Value(parseDollarsToCents(original.text) ?? 0),
+            apr: Value(double.tryParse(apr.text) ?? 0),
+            monthlyPaymentCents: Value(parseDollarsToCents(payment.text) ?? 0),
+          ),
+        );
   }
-
 }
 
 /// Snowball (smallest balance first) vs avalanche (highest APR first).
@@ -268,14 +307,14 @@ class _PayoffCalculatorState extends State<_PayoffCalculator> {
   final _extra = TextEditingController(text: '0');
 
   List<DebtInput> get _debts => [
-        for (final l in widget.loans)
-          DebtInput(
-            id: l.id,
-            balanceCents: l.balanceCents,
-            apr: l.apr,
-            minimumPaymentCents: l.monthlyPaymentCents,
-          ),
-      ];
+    for (final l in widget.loans)
+      DebtInput(
+        id: l.id,
+        balanceCents: l.balanceCents,
+        apr: l.apr,
+        minimumPaymentCents: l.monthlyPaymentCents,
+      ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -285,13 +324,15 @@ class _PayoffCalculatorState extends State<_PayoffCalculator> {
     final live = debts.where((d) => d.balanceCents > 0).length;
 
     final snowball = simulateMultiDebtPayoff(
-        debts: debts,
-        strategy: PayoffStrategy.snowball,
-        extraCents: extraCents);
+      debts: debts,
+      strategy: PayoffStrategy.snowball,
+      extraCents: extraCents,
+    );
     final avalanche = simulateMultiDebtPayoff(
-        debts: debts,
-        strategy: PayoffStrategy.avalanche,
-        extraCents: extraCents);
+      debts: debts,
+      strategy: PayoffStrategy.avalanche,
+      extraCents: extraCents,
+    );
 
     final saving = (snowball != null && avalanche != null)
         ? snowball.totalInterestCents - avalanche.totalInterestCents
@@ -306,36 +347,39 @@ class _PayoffCalculatorState extends State<_PayoffCalculator> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SectionHeader('Payoff calculator',
-                icon: Icons.calculate_outlined,
-                info: InfoButton(
-                  title: 'Snowball vs avalanche',
-                  body: [
-                    'Two ways to order your debts. Both assume you keep '
-                        'paying every minimum, and put any spare money '
-                        'toward one debt at a time.',
-                    'Snowball targets the smallest balance first, so '
-                        'individual debts disappear sooner. Avalanche '
-                        'targets the highest APR first, which always costs '
-                        'the least interest.',
-                    'They only differ when there is a real choice to make: '
-                        'spare money, and more than one debt left to aim it '
-                        'at. With a single debt, or with two debts and no '
-                        'extra payment, both plans do exactly the same thing '
-                        '— so Homebase says they match rather than inventing '
-                        'a difference.',
-                    'As each debt clears, its minimum rolls onto the next '
-                        'one, which is why both plans speed up over time.',
-                  ],
-                )),
+            const SectionHeader(
+              'Payoff calculator',
+              icon: Icons.calculate_outlined,
+              info: InfoButton(
+                title: 'Snowball vs avalanche',
+                body: [
+                  'Two ways to order your debts. Both assume you keep '
+                      'paying every minimum, and put any spare money '
+                      'toward one debt at a time.',
+                  'Snowball targets the smallest balance first, so '
+                      'individual debts disappear sooner. Avalanche '
+                      'targets the highest APR first, which always costs '
+                      'the least interest.',
+                  'They only differ when there is a real choice to make: '
+                      'spare money, and more than one debt left to aim it '
+                      'at. With a single debt, or with two debts and no '
+                      'extra payment, both plans do exactly the same thing '
+                      '— so Granary says they match rather than inventing '
+                      'a difference.',
+                  'As each debt clears, its minimum rolls onto the next '
+                      'one, which is why both plans speed up over time.',
+                ],
+              ),
+            ),
             SizedBox(
               width: 260,
               child: TextField(
                 controller: _extra,
                 decoration: const InputDecoration(
-                    labelText: 'Extra per month (\$)',
-                    helperText: 'Spare money beyond the minimums',
-                    border: OutlineInputBorder()),
+                  labelText: 'Extra per month (\$)',
+                  helperText: 'Spare money beyond the minimums',
+                  border: OutlineInputBorder(),
+                ),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -344,21 +388,36 @@ class _PayoffCalculatorState extends State<_PayoffCalculator> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                    child: _strategy(context, 'Snowball',
-                        'Smallest balance first', snowball, scheme)),
+                  child: _strategy(
+                    context,
+                    'Snowball',
+                    'Smallest balance first',
+                    snowball,
+                    scheme,
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
-                    child: _strategy(context, 'Avalanche',
-                        'Highest APR first', avalanche, scheme)),
+                  child: _strategy(
+                    context,
+                    'Avalanche',
+                    'Highest APR first',
+                    avalanche,
+                    scheme,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            _verdict(context, scheme,
-                live: live,
-                extraCents: extraCents,
-                saving: saving,
-                monthsSaved: monthsSaved,
-                bothWork: snowball != null && avalanche != null),
+            _verdict(
+              context,
+              scheme,
+              live: live,
+              extraCents: extraCents,
+              saving: saving,
+              monthsSaved: monthsSaved,
+              bothWork: snowball != null && avalanche != null,
+            ),
           ],
         ),
       ),
@@ -378,67 +437,77 @@ class _PayoffCalculatorState extends State<_PayoffCalculator> {
   }) {
     if (!bothWork) {
       return _note(
-          context,
-          Icons.warning_amber_outlined,
-          'These minimums do not cover the interest, so the debt never '
-              'clears. Add an extra amount above to find what does.',
-          scheme.error);
+        context,
+        Icons.warning_amber_outlined,
+        'These minimums do not cover the interest, so the debt never '
+        'clears. Add an extra amount above to find what does.',
+        scheme.error,
+      );
     }
     if (live < 2) {
       return _note(
-          context,
-          Icons.info_outline,
-          'With one debt there is no order to choose, so both plans are the '
-              'same. They start to differ once you have two or more.',
-          scheme.onSurfaceVariant);
+        context,
+        Icons.info_outline,
+        'With one debt there is no order to choose, so both plans are the '
+        'same. They start to differ once you have two or more.',
+        scheme.onSurfaceVariant,
+      );
     }
     if (saving > 0) {
       return _note(
-          context,
-          Icons.trending_down,
-          'Avalanche saves ${fmtCents(saving)} in interest'
-              '${monthsSaved > 0 ? ' and finishes $monthsSaved '
+        context,
+        Icons.trending_down,
+        'Avalanche saves ${fmtCents(saving)} in interest'
+        '${monthsSaved > 0 ? ' and finishes $monthsSaved '
                   '${monthsSaved == 1 ? 'month' : 'months'} sooner' : ''}. '
-              'Snowball clears individual debts faster, which some people '
-              'find easier to stick with.',
-          scheme.primary);
+        'Snowball clears individual debts faster, which some people '
+        'find easier to stick with.',
+        scheme.primary,
+      );
     }
     if (extraCents == 0) {
       return _note(
-          context,
-          Icons.info_outline,
-          'With no extra payment there is nothing to redirect, so both plans '
-              'are identical. Add an extra amount above to see them diverge.',
-          scheme.onSurfaceVariant);
-    }
-    return _note(
         context,
         Icons.info_outline,
-        'These debts happen to cost the same either way — the ordering makes '
-            'no difference at this extra amount. Pick whichever you find '
-            'easier to keep up.',
-        scheme.onSurfaceVariant);
+        'With no extra payment there is nothing to redirect, so both plans '
+        'are identical. Add an extra amount above to see them diverge.',
+        scheme.onSurfaceVariant,
+      );
+    }
+    return _note(
+      context,
+      Icons.info_outline,
+      'These debts happen to cost the same either way — the ordering makes '
+      'no difference at this extra amount. Pick whichever you find '
+      'easier to keep up.',
+      scheme.onSurfaceVariant,
+    );
   }
 
-  Widget _note(
-      BuildContext context, IconData icon, String text, Color color) {
+  Widget _note(BuildContext context, IconData icon, String text, Color color) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 8),
         Expanded(
-            child: Text(text,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: color))),
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: color),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _strategy(BuildContext context, String name, String detail,
-      MultiDebtProjection? result, ColorScheme scheme) {
+  Widget _strategy(
+    BuildContext context,
+    String name,
+    String detail,
+    MultiDebtProjection? result,
+    ColorScheme scheme,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -452,13 +521,19 @@ class _PayoffCalculatorState extends State<_PayoffCalculator> {
           Text(detail, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 8),
           if (result == null)
-            Text('Never pays off at these payments',
-                style: TextStyle(color: scheme.error))
+            Text(
+              'Never pays off at these payments',
+              style: TextStyle(color: scheme.error),
+            )
           else ...[
-            Text('${result.months ~/ 12}y ${result.months % 12}m to debt-free',
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            Text('${fmtCents(result.totalInterestCents)} total interest',
-                style: TextStyle(color: scheme.error)),
+            Text(
+              '${result.months ~/ 12}y ${result.months % 12}m to debt-free',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text(
+              '${fmtCents(result.totalInterestCents)} total interest',
+              style: TextStyle(color: scheme.error),
+            ),
           ],
         ],
       ),

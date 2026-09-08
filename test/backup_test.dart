@@ -1,9 +1,9 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:homebase_money/data/backup.dart';
-import 'package:homebase_money/data/database.dart';
-import 'package:homebase_money/data/repository.dart';
+import 'package:granary/data/backup.dart';
+import 'package:granary/data/database.dart';
+import 'package:granary/data/repository.dart';
 
 void main() {
   late AppDatabase db;
@@ -25,7 +25,6 @@ void main() {
         name: '$tag visa',
         creditLimitCents: 500000,
         balanceCents: const Value(120000),
-        statementBalanceCents: const Value(140000),
         annualFeeCents: const Value(9500),
         annualFeeDate: Value(DateTime(2027, 3, 1))));
     final loanId = await repo.upsertLoan(LoansCompanion.insert(
@@ -34,6 +33,11 @@ void main() {
         balanceCents: 800000,
         originalAmountCents: 1500000,
         monthlyPaymentCents: const Value(35000)));
+    final savingsId = await repo.upsertAccount(AccountsCompanion.insert(
+        profileId: profileId,
+        name: '$tag savings',
+        type: AccountType.savings,
+        balanceCents: const Value(500000)));
     final billId = await repo.upsertBill(BillsCompanion.insert(
         profileId: profileId,
         name: '$tag phone',
@@ -59,13 +63,25 @@ void main() {
         paycheckId: paycheck.id,
         target: 'Savings',
         amountCents: 50000));
-    await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
+    final entryId = await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
         profileId: profileId,
         date: DateTime(2026, 8, 10),
         amountCents: 4200,
         type: EntryType.expense,
         category: const Value('Groceries'),
         accountId: Value(accountId)));
+    await repo.setEntryTags(
+        profileId: profileId, entryId: entryId, tagNames: ['$tag-trip']);
+    await repo.upsertRecurringTransfer(RecurringTransfersCompanion.insert(
+        profileId: profileId,
+        name: '$tag to savings',
+        fromAccountId: accountId,
+        toAccountId: savingsId,
+        amountCents: 20000,
+        frequency: PayFrequency.monthly,
+        anchorDate: DateTime(2026, 8, 1)));
+    await repo.materializeDueTransfers(
+        profileId: profileId, now: DateTime(2026, 8, 15));
     await repo.upsertBudgetTarget(BudgetTargetsCompanion.insert(
         profileId: profileId,
         category: 'Groceries',
@@ -114,6 +130,8 @@ void main() {
 
   Future<Map<String, int>> counts() async => {
         'accounts': (await db.select(db.accounts).get()).length,
+        'accountBalanceSnapshots':
+            (await db.select(db.accountBalanceSnapshots).get()).length,
         'creditCards': (await db.select(db.creditCards).get()).length,
         'loans': (await db.select(db.loans).get()).length,
         'bills': (await db.select(db.bills).get()).length,
@@ -122,10 +140,15 @@ void main() {
         'paycheckAllocations':
             (await db.select(db.paycheckAllocations).get()).length,
         'budgetEntries': (await db.select(db.budgetEntries).get()).length,
+        'tags': (await db.select(db.tags).get()).length,
+        'budgetEntryTags': (await db.select(db.budgetEntryTags).get()).length,
         'budgetTargets': (await db.select(db.budgetTargets).get()).length,
         'categoryRules': (await db.select(db.categoryRules).get()).length,
         'payments': (await db.select(db.payments).get()).length,
         'goals': (await db.select(db.goals).get()).length,
+        'recurringTransfers':
+            (await db.select(db.recurringTransfers).get()).length,
+        'transferLogs': (await db.select(db.transferLogs).get()).length,
       };
 
   test('a full backup restores every table exactly', () async {
@@ -139,13 +162,26 @@ void main() {
     expect(await counts(), before, reason: 'no table may be dropped');
     final card = (await repo.watchCards(profileId: owner).first).single;
     expect(card.name, 'owner visa');
-    expect(card.statementBalanceCents, 140000,
-        reason: 'newer columns survive the round trip');
+    expect(card.balanceCents, 110000,
+        reason: 'the balance after the logged payment survives the round trip');
     expect(card.annualFeeDate, DateTime(2027, 3, 1),
         reason: 'dates survive the round trip');
     final goal = (await repo.watchGoals(profileId: owner).first).single;
     expect(goal.currentAmountCents, 250000);
     expect(goal.targetDate, DateTime(2027, 6, 1));
+
+    final tags = await repo.watchTags(profileId: owner).first;
+    expect(tags.map((t) => t.name), contains('owner-trip'),
+        reason: 'tags survive the round trip');
+    final tagsByEntry = await repo.watchEntryTagNames(profileId: owner).first;
+    expect(tagsByEntry.values.single, ['owner-trip'],
+        reason: 'the tag stays linked to its entry, not just present');
+    final transfers =
+        await repo.watchRecurringTransfers(profileId: owner).first;
+    expect(transfers.single.name, 'owner to savings');
+    final history = await repo.watchTransferHistory(profileId: owner).first;
+    expect(history, isNotEmpty,
+        reason: 'executed transfer history survives the round trip');
   });
 
   test('restore replaces rather than merges', () async {

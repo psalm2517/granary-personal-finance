@@ -6,6 +6,7 @@ import 'data/notifications.dart';
 import 'data/repository.dart';
 import 'screens/profile_picker.dart';
 import 'screens/shell.dart';
+import 'theme/accent_provider.dart';
 import 'theme/catppuccin.dart';
 import 'theme/flavor_provider.dart';
 
@@ -30,20 +31,21 @@ final activeProfileProvider = StateProvider<Profile?>((ref) {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.instance.init();
-  runApp(const ProviderScope(child: HomebaseApp()));
+  runApp(const ProviderScope(child: GranaryApp()));
 }
 
-class HomebaseApp extends ConsumerWidget {
-  const HomebaseApp({super.key});
+class GranaryApp extends ConsumerWidget {
+  const GranaryApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final flavor = ref.watch(flavorProvider);
+    final accent = ref.watch(accentProvider);
     return MaterialApp(
-      title: 'Homebase Money',
-      // One theme, built from the chosen flavor — the platform's own
-      // light/dark setting does not override an explicit choice.
-      theme: themeFor(flavor),
+      title: 'Granary',
+      // One theme, built from the chosen flavor and accent — the platform's
+      // own light/dark setting does not override an explicit choice.
+      theme: themeFor(flavor, accent),
       home: const _Root(),
     );
   }

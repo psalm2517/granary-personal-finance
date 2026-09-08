@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:homebase_money/data/database.dart';
-import 'package:homebase_money/data/repository.dart';
+import 'package:granary/data/database.dart';
+import 'package:granary/data/repository.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// Builds a schema-v2 file (the shape shipped before billing cycles) so the
@@ -339,6 +339,41 @@ void main() {
         statement_day INTEGER NULL,
         payment_due_day INTEGER NULL);
     """);
+    raw.execute("""
+      CREATE TABLE accounts (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        institution TEXT NULL,
+        type TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0);
+    """);
+    raw.execute("""
+      CREATE TABLE bills (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        due_day INTEGER NOT NULL,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        autopay INTEGER NOT NULL DEFAULT 0,
+        due_month INTEGER NULL,
+        due_year INTEGER NULL,
+        category TEXT NOT NULL DEFAULT 'Other');
+    """);
+    raw.execute("""
+      CREATE TABLE budget_entries (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        date INTEGER NOT NULL,
+        category TEXT NOT NULL DEFAULT 'Other',
+        amount_cents INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        description TEXT NULL,
+        account_id INTEGER NULL,
+        source_paycheck_id INTEGER NULL,
+        source_bill_payment_id INTEGER NULL);
+    """);
     raw.execute("INSERT INTO profiles (name, is_admin) VALUES ('Owner', 1);");
     raw.execute('INSERT INTO credit_cards '
         '(profile_id, name, credit_limit_cents, balance_cents, '
@@ -414,7 +449,7 @@ void main() {
     );
   });
 
-  test('v10 renames statement_day and seeds the statement balance',
+  test('v10 renames statement_day, and statement balance is gone by v13',
       () async {
     final v10Dir = Directory.systemTemp.createTempSync('homebase_v10');
     addTearDown(() => v10Dir.deleteSync(recursive: true));
@@ -442,6 +477,42 @@ void main() {
         payment_due_day INTEGER NULL,
         annual_fee_date INTEGER NULL);
     """);
+    raw.execute("""
+      CREATE TABLE bills (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        due_day INTEGER NOT NULL,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        autopay INTEGER NOT NULL DEFAULT 0,
+        due_month INTEGER NULL,
+        due_year INTEGER NULL,
+        category TEXT NOT NULL DEFAULT 'Other');
+    """);
+    raw.execute("""
+      CREATE TABLE budget_entries (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        date INTEGER NOT NULL,
+        category TEXT NOT NULL DEFAULT 'Other',
+        amount_cents INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        description TEXT NULL,
+        account_id INTEGER NULL,
+        source_paycheck_id INTEGER NULL,
+        source_bill_payment_id INTEGER NULL);
+    """);
+    raw.execute("""
+      CREATE TABLE goals (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        target_amount_cents INTEGER NOT NULL,
+        current_amount_cents INTEGER NOT NULL DEFAULT 0,
+        target_date INTEGER NULL);
+    """);
     raw.execute("INSERT INTO profiles (name, is_admin) VALUES ('Owner', 1);");
     raw.execute('INSERT INTO credit_cards '
         '(profile_id, name, credit_limit_cents, balance_cents, statement_day, '
@@ -457,9 +528,140 @@ void main() {
     expect(card.statementCloseDay, 20,
         reason: 'the renamed column keeps its value');
     expect(card.paymentDueDay, 15);
-    expect(card.statementBalanceCents, 120000,
-        reason: 'seeded from the current balance so utilization is not zero');
     expect(card.minimumPaymentDueCents, isNull);
-    expect(HomebaseRepository.utilizationOf(card), closeTo(0.24, 0.001));
+    // statement_balance_cents existed briefly between v11 and v13, then
+    // v13 drops it — it is simply not part of the CreditCard class any
+    // more, so there is nothing left to assert about its seeded value.
+    expect(HomebaseRepository.utilizationOf(card), closeTo(0.24, 0.001),
+        reason: 'utilization now comes straight from the current balance');
+  });
+
+  test(
+      'a v11 database gains payee, goal-account links, tags and recurring '
+      'transfers', () async {
+    final v11Dir = Directory.systemTemp.createTempSync('homebase_v11');
+    addTearDown(() => v11Dir.deleteSync(recursive: true));
+    final v11File = File('${v11Dir.path}/homebase.sqlite');
+
+    final raw = sqlite3.open(v11File.path);
+    raw.execute("""
+      CREATE TABLE profiles (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        pin_hash TEXT NULL,
+        is_admin INTEGER NOT NULL DEFAULT 0);
+    """);
+    raw.execute("""
+      CREATE TABLE accounts (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        institution TEXT NULL,
+        type TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0);
+    """);
+    raw.execute("""
+      CREATE TABLE credit_cards (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0,
+        credit_limit_cents INTEGER NOT NULL,
+        apr REAL NOT NULL DEFAULT 0,
+        annual_fee_cents INTEGER NOT NULL DEFAULT 0,
+        monthly_fee_cents INTEGER NOT NULL DEFAULT 0,
+        statement_close_day INTEGER NULL,
+        payment_due_day INTEGER NULL,
+        annual_fee_date INTEGER NULL,
+        statement_balance_cents INTEGER NOT NULL DEFAULT 0,
+        minimum_payment_due_cents INTEGER NULL);
+    """);
+    raw.execute("""
+      CREATE TABLE bills (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        due_day INTEGER NOT NULL,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        autopay INTEGER NOT NULL DEFAULT 0,
+        due_month INTEGER NULL,
+        due_year INTEGER NULL,
+        category TEXT NOT NULL DEFAULT 'Other');
+    """);
+    raw.execute("""
+      CREATE TABLE budget_entries (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        date INTEGER NOT NULL,
+        category TEXT NOT NULL DEFAULT 'Other',
+        amount_cents INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        description TEXT NULL,
+        account_id INTEGER NULL REFERENCES accounts (id),
+        source_paycheck_id INTEGER NULL,
+        source_bill_payment_id INTEGER NULL);
+    """);
+    raw.execute("""
+      CREATE TABLE goals (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        target_amount_cents INTEGER NOT NULL,
+        current_amount_cents INTEGER NOT NULL DEFAULT 0,
+        target_date INTEGER NULL);
+    """);
+    raw.execute("INSERT INTO profiles (name, is_admin) VALUES ('Owner', 1);");
+    raw.execute("INSERT INTO accounts (profile_id, name, type, balance_cents) "
+        "VALUES (1, 'Savings', 'savings', 500000);");
+    raw.execute('INSERT INTO credit_cards '
+        '(profile_id, name, credit_limit_cents, balance_cents, '
+        'statement_balance_cents) '
+        "VALUES (1, 'Visa', 500000, 120000, 120000);");
+    raw.execute('INSERT INTO budget_entries '
+        '(profile_id, date, category, amount_cents, type, description) '
+        "VALUES (1, 0, 'Groceries', 8000, 'expense', 'Costco run');");
+    raw.execute('INSERT INTO goals '
+        '(profile_id, name, type, target_amount_cents, current_amount_cents) '
+        "VALUES (1, 'Emergency fund', 'savings', 1000000, 250000);");
+    raw.execute('PRAGMA user_version = 11;');
+    raw.close();
+
+    final db = AppDatabase.forTesting(NativeDatabase(v11File));
+    addTearDown(db.close);
+
+    // Existing rows survive, with the new columns empty.
+    final entry = await db.select(db.budgetEntries).getSingle();
+    expect(entry.description, 'Costco run');
+    expect(entry.payee, isNull);
+    final goal = await db.select(db.goals).getSingle();
+    expect(goal.name, 'Emergency fund');
+    expect(goal.currentAmountCents, 250000);
+    expect(goal.accountId, isNull);
+
+    // The v13 card-balance simplification also runs on top of this: the
+    // card survives, just without a separate statement balance any more.
+    final card = await db.select(db.creditCards).getSingle();
+    expect(card.name, 'Visa');
+    expect(card.balanceCents, 120000);
+
+    // The new tables exist and are usable.
+    final account = await db.select(db.accounts).getSingle();
+    await db.into(db.tags).insert(
+        TagsCompanion.insert(profileId: 1, name: 'vacation2026'));
+    await db.into(db.recurringTransfers).insert(
+        RecurringTransfersCompanion.insert(
+            profileId: 1,
+            name: 'To savings',
+            fromAccountId: account.id,
+            toAccountId: account.id,
+            amountCents: 20000,
+            frequency: PayFrequency.monthly,
+            anchorDate: DateTime(2026, 9, 1)));
+
+    expect((await db.select(db.tags).get()).single.name, 'vacation2026');
+    expect((await db.select(db.recurringTransfers).get()).single.name,
+        'To savings');
   });
 }
