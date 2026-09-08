@@ -122,10 +122,14 @@ Android build
 
 Flatpak packaging
 
+SimpleFin Bridge integration
+
+Ollama integration
+
 ## AI disclosure
 
 This project was built with AI assistance, directed by me.
 
 ## License
 
-Unlicense. See [LICENSE](./LICENSE).
+MIT. See [LICENSE](./LICENSE).
