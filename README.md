@@ -7,6 +7,8 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Version](https://img.shields.io/badge/version-0.3.0-informational.svg)](https://github.com/psalm2517/homebase-money/releases)
 
+### [⬇ Download for Linux](https://github.com/psalm2517/homebase-money/releases/download/v0.3.0/granary-linux-x64-v0.3.0.tar.gz)
+
 A personal finance tracker for a household, built for the desktop. Everything
 stays on your own machine: there is no account to make, no server, and
 nothing is uploaded anywhere.
