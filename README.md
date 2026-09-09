@@ -23,16 +23,12 @@ Android is planned as a secondary one.
 ## What it does
 
 **Accounts.** Checking, savings, cash, investment and retirement balances,
-grouped by type with a total for each. These are the asset side of net worth.
+cards and loans, all in one place with a running total for each. These are
+the asset side of net worth.
 
-**Cards.** Balances, limits and utilization, plus statement cycles.
-Utilization is calculated from the *statement* balance (what the issuer
-actually reports to the credit bureaus), while everything else uses the
-current balance, since that is the money you really owe. Both are shown side
-by side so the difference is visible rather than silently baked into a
-calculation.
+![Accounts](docs/screenshots/accounts.png)
 
-![Cards](docs/screenshots/cards.png)
+**Cards.** Balances, limits, utilization and statement cycles.
 
 **Loans.** Payoff progress, a snowball vs. avalanche comparison, and a
 "what if" simulator with a slider for extra monthly payments that shows the
@@ -40,27 +36,44 @@ interest and time you would save.
 
 ![Loans](docs/screenshots/loans.png)
 
-**Bills.** Monthly, quarterly, annual or one-time, with autopay support. Paid
+**Bills.** Monthly, quarterly, annual or one-time, with autopay support. A
+bill can be assigned to the account or card it's paid from, so marking it
+paid moves real money instead of just tracking that it happened. Paid
 status is recorded against the month it covers, so it resets itself on the
 1st and past months keep their real history.
 
 ![Bills](docs/screenshots/bills.png)
 
-**Budget.** What came in, what went out and what is left for the month.
-Paychecks and paid bills post themselves automatically, so most months need
-no manual entry beyond cash spending.
+**Budget.** What came in, what went out and what is left for the month, plus
+a Sankey-style chart of where it actually flowed. Paychecks and paid bills
+post themselves automatically, so most months need no manual entry beyond
+cash spending.
 
 ![Budget](docs/screenshots/budget.png)
+
+**Transactions.** A full, searchable register across every month, not just
+the current one — filter by account, card or income/expense. A transaction
+can be split across multiple categories, and editing one after the fact
+corrects any balance it already moved.
+
+![Transactions](docs/screenshots/transactions.png)
+
+**Transfers.** Move money between your own accounts, either on a recurring
+schedule or as a one-off "transfer now."
 
 **Paychecks.** Set a schedule once (weekly, bi-weekly, semi-monthly,
 monthly) and paychecks generate 90 days ahead, mark themselves received on
 payday, and can be split across allocations like rent or savings.
 
-**Goals.** Savings or payoff targets with progress tracking, and a monthly
-figure to hit a target date.
+**Goals.** Savings or payoff targets with progress tracking, optionally
+tied to a real account's live balance, and a monthly figure to hit a target
+date.
 
-**Dashboard.** Net worth trend, credit utilization, cashflow, upcoming
-bills and a credit score history you log yourself.
+![Goals](docs/screenshots/goals.png)
+
+**Dashboard.** Net worth trend and breakdown, a 60-day cash balance
+projection, credit utilization, cashflow, upcoming bills and a credit score
+history you log yourself.
 
 ## Privacy between profiles
 
@@ -119,7 +132,7 @@ All database access goes through `HomebaseRepository`; widgets never touch
 Drift directly. That keeps the per-profile rule in one place and leaves room
 for a sync layer later without rewriting the screens.
 
-Schema changes are versioned migrations (currently v11) with tests that
+Schema changes are versioned migrations (currently v17) with tests that
 upgrade a real database of each older shape, so existing data survives an
 update.
 
