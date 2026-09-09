@@ -1036,6 +1036,59 @@ class HomebaseRepository {
     return rows;
   }
 
+  /// Edits an entry in place, correcting any balance effect for the
+  /// change — reversing whatever the old amount, type or account/card link
+  /// did, then applying whatever the new one does. [entry] only needs to
+  /// carry the fields being changed; anything left absent keeps its
+  /// current value.
+  Future<void> updateBudgetEntry({
+    required int profileId,
+    required int id,
+    required BudgetEntriesCompanion entry,
+  }) async {
+    final old = await (_db.select(_db.budgetEntries)
+          ..where((e) => e.profileId.equals(profileId) & e.id.equals(id)))
+        .getSingleOrNull();
+    if (old == null) return;
+
+    final newAccountId =
+        entry.accountId.present ? entry.accountId.value : old.accountId;
+    final newCardId = entry.cardId.present ? entry.cardId.value : old.cardId;
+    final newAmount =
+        entry.amountCents.present ? entry.amountCents.value : old.amountCents;
+    final newType = entry.type.present ? entry.type.value : old.type;
+
+    await _db.transaction(() async {
+      if (old.accountId != null) {
+        await _adjustAccountBalance(old.accountId!,
+            old.type == EntryType.income ? -old.amountCents : old.amountCents);
+      }
+      if (old.cardId != null) {
+        await _adjustCardBalance(old.cardId!,
+            old.type == EntryType.expense ? -old.amountCents : old.amountCents);
+      }
+
+      await (_db.update(_db.budgetEntries)..where((e) => e.id.equals(id)))
+          .write(entry);
+
+      final isExpense = newType == EntryType.expense;
+      if (newAccountId != null) {
+        await _adjustAccountBalance(
+            newAccountId, isExpense ? -newAmount : newAmount);
+      }
+      if (newCardId != null) {
+        await _adjustCardBalance(newCardId, isExpense ? newAmount : -newAmount);
+      }
+    });
+
+    if (old.accountId != null ||
+        old.cardId != null ||
+        newAccountId != null ||
+        newCardId != null) {
+      await recordNetWorthSnapshot(profileId: profileId);
+    }
+  }
+
   // ---- Splits ----
   //
   // A split breaks one entry's total across more than one category — e.g. a

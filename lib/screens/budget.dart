@@ -42,7 +42,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _addEntry(context),
+        onPressed: () => _editEntry(context),
         icon: const Icon(Icons.add),
         label: const Text('Add entry'),
       ),
@@ -581,6 +581,13 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
           ),
           IconButton(
             tooltip: automatic
+                ? 'Added automatically — edit it on Paychecks or Bills'
+                : 'Edit',
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            onPressed: automatic ? null : () => _editEntry(context, existing: e),
+          ),
+          IconButton(
+            tooltip: automatic
                 ? 'Added automatically — remove it on Paychecks or Bills'
                 : 'Delete',
             icon: const Icon(Icons.delete_outline, size: 18),
@@ -719,22 +726,54 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
         monthlyTargetCents: cents));
   }
 
-  Future<void> _addEntry(BuildContext context) async {
+  Future<void> _editEntry(BuildContext context, {BudgetEntry? existing}) async {
     final repo = ref.read(repositoryProvider);
     final profileId = ref.read(activeProfileProvider)!.id;
-    final description = TextEditingController();
-    final amount = TextEditingController();
-    final category = TextEditingController();
-    final payee = TextEditingController();
-    final tags = TextEditingController();
-    var type = EntryType.expense;
+    final description = TextEditingController(text: existing?.description);
+    final amount = TextEditingController(
+        text: existing == null
+            ? ''
+            : (existing.amountCents / 100).toString());
+    final category = TextEditingController(
+        text: existing == null || existing.category == 'Split'
+            ? existing?.category ?? ''
+            : existing.category);
+    final payee = TextEditingController(text: existing?.payee);
+    var type = existing?.type ?? EntryType.expense;
     var autoCategorized = false;
     // Encoded as "account:3" or "card:2" so one dropdown can offer both.
-    String? source;
+    String? source = existing == null
+        ? null
+        : existing.accountId != null
+            ? 'account:${existing.accountId}'
+            : existing.cardId != null
+                ? 'card:${existing.cardId}'
+                : null;
     var splitMode = false;
     final splitRows = <({TextEditingController category, TextEditingController amount})>[];
+    var existingTags = <String>[];
+    if (existing != null) {
+      final splits = await repo.splitsFor(entryId: existing.id);
+      if (splits.isNotEmpty) {
+        splitMode = true;
+        splitRows.addAll([
+          for (final s in splits)
+            (
+              category: TextEditingController(text: s.category),
+              amount: TextEditingController(
+                  text: (s.amountCents / 100).toString()),
+            ),
+        ]);
+      }
+      final tagsByEntry =
+          await repo.watchEntryTagNames(profileId: profileId).first;
+      existingTags = tagsByEntry[existing.id] ?? [];
+    }
+    final tags = TextEditingController(text: existingTags.join(', '));
     final accounts = (await repo.watchAccounts(profileId: profileId).first)
-        .where((a) => HomebaseRepository.cashAccountTypes.contains(a.type))
+        .where((a) =>
+            HomebaseRepository.cashAccountTypes.contains(a.type) ||
+            a.id == existing?.accountId)
         .toList();
     final cards = await repo.watchCards(profileId: profileId).first;
     if (!context.mounted) return;
@@ -743,7 +782,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Add entry'),
+          title: Text(existing == null ? 'Add entry' : 'Edit entry'),
           content: SizedBox(
             width: 360,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -937,7 +976,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                 child: const Text('Cancel')),
             FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Save')),
+                child: Text(existing == null ? 'Save' : 'Save changes')),
           ],
         ),
       ),
@@ -948,7 +987,10 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
       if (context.mounted) warnNotSaved(context, 'enter an amount');
       return;
     }
-    List<({String category, int amountCents})>? splits;
+    // Splits are set unconditionally when editing (even to an empty list)
+    // so turning split mode off on a previously-split entry actually
+    // clears the old ones instead of leaving them behind.
+    List<({String category, int amountCents})> splits = [];
     if (splitMode) {
       splits = [
         for (final row in splitRows)
@@ -968,35 +1010,57 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
     }
     final sourceParts = source?.split(':');
     final isAccount = sourceParts == null || sourceParts[0] == 'account';
-    final entryId = await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
-      profileId: profileId,
-      date: DateTime.now(),
-      amountCents: cents,
-      type: type,
-      category: Value(splitMode
-          ? 'Split'
-          : category.text.trim().isEmpty
-              ? 'Other'
-              : category.text.trim()),
-      description: Value(
-          description.text.trim().isEmpty ? null : description.text.trim()),
-      payee: Value(payee.text.trim().isEmpty ? null : payee.text.trim()),
-      accountId: Value(sourceParts == null || !isAccount
-          ? null
-          : int.parse(sourceParts[1])),
-      cardId: Value(sourceParts == null || isAccount
-          ? null
-          : int.parse(sourceParts[1])),
-    ));
-    if (splits != null) {
-      await repo.setEntrySplits(
-          profileId: profileId, entryId: entryId, splits: splits);
+    final categoryValue = Value(splitMode
+        ? 'Split'
+        : category.text.trim().isEmpty
+            ? 'Other'
+            : category.text.trim());
+    final descriptionValue = Value(
+        description.text.trim().isEmpty ? null : description.text.trim());
+    final payeeValue =
+        Value(payee.text.trim().isEmpty ? null : payee.text.trim());
+    final accountIdValue = Value(
+        sourceParts == null || !isAccount ? null : int.parse(sourceParts[1]));
+    final cardIdValue = Value(
+        sourceParts == null || isAccount ? null : int.parse(sourceParts[1]));
+
+    final int entryId;
+    if (existing == null) {
+      entryId = await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
+        profileId: profileId,
+        date: DateTime.now(),
+        amountCents: cents,
+        type: type,
+        category: categoryValue,
+        description: descriptionValue,
+        payee: payeeValue,
+        accountId: accountIdValue,
+        cardId: cardIdValue,
+      ));
+    } else {
+      entryId = existing.id;
+      await repo.updateBudgetEntry(
+        profileId: profileId,
+        id: existing.id,
+        entry: BudgetEntriesCompanion(
+          amountCents: Value(cents),
+          type: Value(type),
+          category: categoryValue,
+          description: descriptionValue,
+          payee: payeeValue,
+          accountId: accountIdValue,
+          cardId: cardIdValue,
+        ),
+      );
     }
-    final tagNames = tags.text.split(',');
-    if (tagNames.any((t) => t.trim().isNotEmpty)) {
-      await repo.setEntryTags(
-          profileId: profileId, entryId: entryId, tagNames: tagNames);
-    }
+    await repo.setEntrySplits(
+        profileId: profileId, entryId: entryId, splits: splits);
+    // Set unconditionally, same as splits above — clears old tags on an
+    // edit that removes them, and is a harmless no-op for a fresh entry.
+    await repo.setEntryTags(
+        profileId: profileId,
+        entryId: entryId,
+        tagNames: tags.text.split(','));
   }
 
   Future<void> _manageTargets(BuildContext context) async {
