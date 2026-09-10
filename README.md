@@ -5,9 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-lightgrey.svg)](#building)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
-[![Version](https://img.shields.io/badge/version-0.3.2-informational.svg)](https://github.com/psalm2517/granary-personal-finance/releases)
+[![Version](https://img.shields.io/badge/version-0.3.3-informational.svg)](https://github.com/psalm2517/granary-personal-finance/releases)
 
-### [⬇ Download for Linux](https://github.com/psalm2517/granary-personal-finance/releases/download/v0.3.2/granary-linux-x64-v0.3.2.tar.gz)
+### [⬇ Download for Linux](https://github.com/psalm2517/granary-personal-finance/releases/download/v0.3.3/granary-linux-x64-v0.3.3.tar.gz)
 
 A personal finance tracker for a household, built for the desktop. Everything
 stays on your own machine: there is no account to make, no server, and
