@@ -219,6 +219,12 @@ class CardsScreen extends ConsumerWidget {
             name: c.name,
             balanceCents: c.balanceCents),
     ];
+    final repo = ref.read(repositoryProvider);
+    final profileId = ref.read(activeProfileProvider)!.id;
+    final fromAccounts = (await repo.watchAccounts(profileId: profileId).first)
+        .where((a) => HomebaseRepository.cashAccountTypes.contains(a.type))
+        .toList();
+    if (!context.mounted) return;
     final logged = await showQuickPaymentDialog(
       context,
       ref,
@@ -226,6 +232,7 @@ class CardsScreen extends ConsumerWidget {
       preselected: preselect == null
           ? null
           : accounts.firstWhere((a) => a.id == preselect.id),
+      fromAccounts: fromAccounts,
     );
     if (logged && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(

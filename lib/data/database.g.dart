@@ -6254,6 +6254,20 @@ class $PaymentsTable extends Payments with TableInfo<$PaymentsTable, Payment> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _fromAccountIdMeta = const VerificationMeta(
+    'fromAccountId',
+  );
+  @override
+  late final GeneratedColumn<int> fromAccountId = GeneratedColumn<int>(
+    'from_account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES accounts (id)',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -6263,6 +6277,7 @@ class $PaymentsTable extends Payments with TableInfo<$PaymentsTable, Payment> {
     amountCents,
     date,
     note,
+    fromAccountId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6320,6 +6335,15 @@ class $PaymentsTable extends Payments with TableInfo<$PaymentsTable, Payment> {
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('from_account_id')) {
+      context.handle(
+        _fromAccountIdMeta,
+        fromAccountId.isAcceptableOrUnknown(
+          data['from_account_id']!,
+          _fromAccountIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -6359,6 +6383,10 @@ class $PaymentsTable extends Payments with TableInfo<$PaymentsTable, Payment> {
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      fromAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}from_account_id'],
+      ),
     );
   }
 
@@ -6385,6 +6413,11 @@ class Payment extends DataClass implements Insertable<Payment> {
   final int amountCents;
   final DateTime date;
   final String? note;
+
+  /// The bank or cash account this payment actually came from, when known.
+  /// Optional — logging a payment still works without it, same as before;
+  /// setting it also deducts the amount from that account's balance.
+  final int? fromAccountId;
   const Payment({
     required this.id,
     required this.profileId,
@@ -6393,6 +6426,7 @@ class Payment extends DataClass implements Insertable<Payment> {
     required this.amountCents,
     required this.date,
     this.note,
+    this.fromAccountId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -6410,6 +6444,9 @@ class Payment extends DataClass implements Insertable<Payment> {
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
     }
+    if (!nullToAbsent || fromAccountId != null) {
+      map['from_account_id'] = Variable<int>(fromAccountId);
+    }
     return map;
   }
 
@@ -6422,6 +6459,9 @@ class Payment extends DataClass implements Insertable<Payment> {
       amountCents: Value(amountCents),
       date: Value(date),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      fromAccountId: fromAccountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fromAccountId),
     );
   }
 
@@ -6440,6 +6480,7 @@ class Payment extends DataClass implements Insertable<Payment> {
       amountCents: serializer.fromJson<int>(json['amountCents']),
       date: serializer.fromJson<DateTime>(json['date']),
       note: serializer.fromJson<String?>(json['note']),
+      fromAccountId: serializer.fromJson<int?>(json['fromAccountId']),
     );
   }
   @override
@@ -6455,6 +6496,7 @@ class Payment extends DataClass implements Insertable<Payment> {
       'amountCents': serializer.toJson<int>(amountCents),
       'date': serializer.toJson<DateTime>(date),
       'note': serializer.toJson<String?>(note),
+      'fromAccountId': serializer.toJson<int?>(fromAccountId),
     };
   }
 
@@ -6466,6 +6508,7 @@ class Payment extends DataClass implements Insertable<Payment> {
     int? amountCents,
     DateTime? date,
     Value<String?> note = const Value.absent(),
+    Value<int?> fromAccountId = const Value.absent(),
   }) => Payment(
     id: id ?? this.id,
     profileId: profileId ?? this.profileId,
@@ -6474,6 +6517,9 @@ class Payment extends DataClass implements Insertable<Payment> {
     amountCents: amountCents ?? this.amountCents,
     date: date ?? this.date,
     note: note.present ? note.value : this.note,
+    fromAccountId: fromAccountId.present
+        ? fromAccountId.value
+        : this.fromAccountId,
   );
   Payment copyWithCompanion(PaymentsCompanion data) {
     return Payment(
@@ -6488,6 +6534,9 @@ class Payment extends DataClass implements Insertable<Payment> {
           : this.amountCents,
       date: data.date.present ? data.date.value : this.date,
       note: data.note.present ? data.note.value : this.note,
+      fromAccountId: data.fromAccountId.present
+          ? data.fromAccountId.value
+          : this.fromAccountId,
     );
   }
 
@@ -6500,7 +6549,8 @@ class Payment extends DataClass implements Insertable<Payment> {
           ..write('accountId: $accountId, ')
           ..write('amountCents: $amountCents, ')
           ..write('date: $date, ')
-          ..write('note: $note')
+          ..write('note: $note, ')
+          ..write('fromAccountId: $fromAccountId')
           ..write(')'))
         .toString();
   }
@@ -6514,6 +6564,7 @@ class Payment extends DataClass implements Insertable<Payment> {
     amountCents,
     date,
     note,
+    fromAccountId,
   );
   @override
   bool operator ==(Object other) =>
@@ -6525,7 +6576,8 @@ class Payment extends DataClass implements Insertable<Payment> {
           other.accountId == this.accountId &&
           other.amountCents == this.amountCents &&
           other.date == this.date &&
-          other.note == this.note);
+          other.note == this.note &&
+          other.fromAccountId == this.fromAccountId);
 }
 
 class PaymentsCompanion extends UpdateCompanion<Payment> {
@@ -6536,6 +6588,7 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
   final Value<int> amountCents;
   final Value<DateTime> date;
   final Value<String?> note;
+  final Value<int?> fromAccountId;
   const PaymentsCompanion({
     this.id = const Value.absent(),
     this.profileId = const Value.absent(),
@@ -6544,6 +6597,7 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
     this.amountCents = const Value.absent(),
     this.date = const Value.absent(),
     this.note = const Value.absent(),
+    this.fromAccountId = const Value.absent(),
   });
   PaymentsCompanion.insert({
     this.id = const Value.absent(),
@@ -6553,6 +6607,7 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
     required int amountCents,
     required DateTime date,
     this.note = const Value.absent(),
+    this.fromAccountId = const Value.absent(),
   }) : profileId = Value(profileId),
        accountType = Value(accountType),
        accountId = Value(accountId),
@@ -6566,6 +6621,7 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
     Expression<int>? amountCents,
     Expression<DateTime>? date,
     Expression<String>? note,
+    Expression<int>? fromAccountId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -6575,6 +6631,7 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
       if (amountCents != null) 'amount_cents': amountCents,
       if (date != null) 'date': date,
       if (note != null) 'note': note,
+      if (fromAccountId != null) 'from_account_id': fromAccountId,
     });
   }
 
@@ -6586,6 +6643,7 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
     Value<int>? amountCents,
     Value<DateTime>? date,
     Value<String?>? note,
+    Value<int?>? fromAccountId,
   }) {
     return PaymentsCompanion(
       id: id ?? this.id,
@@ -6595,6 +6653,7 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
       amountCents: amountCents ?? this.amountCents,
       date: date ?? this.date,
       note: note ?? this.note,
+      fromAccountId: fromAccountId ?? this.fromAccountId,
     );
   }
 
@@ -6624,6 +6683,9 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (fromAccountId.present) {
+      map['from_account_id'] = Variable<int>(fromAccountId.value);
+    }
     return map;
   }
 
@@ -6636,7 +6698,8 @@ class PaymentsCompanion extends UpdateCompanion<Payment> {
           ..write('accountId: $accountId, ')
           ..write('amountCents: $amountCents, ')
           ..write('date: $date, ')
-          ..write('note: $note')
+          ..write('note: $note, ')
+          ..write('fromAccountId: $fromAccountId')
           ..write(')'))
         .toString();
   }
@@ -12509,6 +12572,25 @@ final class $$AccountsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$PaymentsTable, List<Payment>> _paymentsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.payments,
+    aliasName: 'accounts__id__payments__from_account_id',
+  );
+
+  $$PaymentsTableProcessedTableManager get paymentsRefs {
+    final manager = $$PaymentsTableTableManager(
+      $_db,
+      $_db.payments,
+    ).filter((f) => f.fromAccountId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_paymentsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<
     $AccountBalanceSnapshotsTable,
     List<AccountBalanceSnapshot>
@@ -12628,6 +12710,31 @@ class $$AccountsTableFilterComposer
           }) => $$BudgetEntriesTableFilterComposer(
             $db: $db,
             $table: $db.budgetEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> paymentsRefs(
+    Expression<bool> Function($$PaymentsTableFilterComposer f) f,
+  ) {
+    final $$PaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.payments,
+      getReferencedColumn: (t) => t.fromAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.payments,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -12823,6 +12930,31 @@ class $$AccountsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> paymentsRefs<T extends Object>(
+    Expression<T> Function($$PaymentsTableAnnotationComposer a) f,
+  ) {
+    final $$PaymentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.payments,
+      getReferencedColumn: (t) => t.fromAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.payments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> accountBalanceSnapshotsRefs<T extends Object>(
     Expression<T> Function($$AccountBalanceSnapshotsTableAnnotationComposer a)
     f,
@@ -12892,6 +13024,7 @@ class $$AccountsTableTableManager
           PrefetchHooks Function({
             bool profileId,
             bool budgetEntriesRefs,
+            bool paymentsRefs,
             bool accountBalanceSnapshotsRefs,
             bool goalsRefs,
           })
@@ -12951,6 +13084,7 @@ class $$AccountsTableTableManager
               ({
                 profileId = false,
                 budgetEntriesRefs = false,
+                paymentsRefs = false,
                 accountBalanceSnapshotsRefs = false,
                 goalsRefs = false,
               }) {
@@ -12958,6 +13092,7 @@ class $$AccountsTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (budgetEntriesRefs) db.budgetEntries,
+                    if (paymentsRefs) db.payments,
                     if (accountBalanceSnapshotsRefs) db.accountBalanceSnapshots,
                     if (goalsRefs) db.goals,
                   ],
@@ -13011,6 +13146,27 @@ class $$AccountsTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.accountId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (paymentsRefs)
+                        await $_getPrefetchedData<
+                          Account,
+                          $AccountsTable,
+                          Payment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountsTableReferences
+                              ._paymentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).paymentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.fromAccountId == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -13079,6 +13235,7 @@ typedef $$AccountsTableProcessedTableManager =
       PrefetchHooks Function({
         bool profileId,
         bool budgetEntriesRefs,
+        bool paymentsRefs,
         bool accountBalanceSnapshotsRefs,
         bool goalsRefs,
       })
@@ -18312,6 +18469,7 @@ typedef $$PaymentsTableCreateCompanionBuilder = PaymentsCompanion Function({
   required int amountCents,
   required DateTime date,
   Value<String?> note,
+  Value<int?> fromAccountId,
 });
 typedef $$PaymentsTableUpdateCompanionBuilder = PaymentsCompanion Function({
   Value<int> id,
@@ -18321,6 +18479,7 @@ typedef $$PaymentsTableUpdateCompanionBuilder = PaymentsCompanion Function({
   Value<int> amountCents,
   Value<DateTime> date,
   Value<String?> note,
+  Value<int?> fromAccountId,
 });
 
 final class $$PaymentsTableReferences
@@ -18338,6 +18497,23 @@ final class $$PaymentsTableReferences
       $_db.profiles,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_profileIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $AccountsTable _fromAccountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias('payments__from_account_id__accounts__id');
+
+  $$AccountsTableProcessedTableManager? get fromAccountId {
+    final $_column = $_itemColumn<int>('from_account_id');
+    if ($_column == null) return null;
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_fromAccountIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -18399,6 +18575,29 @@ class $$PaymentsTableFilterComposer
           }) => $$ProfilesTableFilterComposer(
             $db: $db,
             $table: $db.profiles,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableFilterComposer get fromAccountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.fromAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -18470,6 +18669,29 @@ class $$PaymentsTableOrderingComposer
     );
     return composer;
   }
+
+  $$AccountsTableOrderingComposer get fromAccountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.fromAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$PaymentsTableAnnotationComposer
@@ -18526,6 +18748,29 @@ class $$PaymentsTableAnnotationComposer
     );
     return composer;
   }
+
+  $$AccountsTableAnnotationComposer get fromAccountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.fromAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$PaymentsTableTableManager
@@ -18541,7 +18786,7 @@ class $$PaymentsTableTableManager
           $$PaymentsTableUpdateCompanionBuilder,
           (Payment, $$PaymentsTableReferences),
           Payment,
-          PrefetchHooks Function({bool profileId})
+          PrefetchHooks Function({bool profileId, bool fromAccountId})
         > {
   $$PaymentsTableTableManager(_$AppDatabase db, $PaymentsTable table)
     : super(
@@ -18563,6 +18808,7 @@ class $$PaymentsTableTableManager
                 Value<int> amountCents = const Value.absent(),
                 Value<DateTime> date = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<int?> fromAccountId = const Value.absent(),
               }) => PaymentsCompanion(
                 id: id,
                 profileId: profileId,
@@ -18571,6 +18817,7 @@ class $$PaymentsTableTableManager
                 amountCents: amountCents,
                 date: date,
                 note: note,
+                fromAccountId: fromAccountId,
               ),
           createCompanionCallback:
               ({
@@ -18581,6 +18828,7 @@ class $$PaymentsTableTableManager
                 required int amountCents,
                 required DateTime date,
                 Value<String?> note = const Value.absent(),
+                Value<int?> fromAccountId = const Value.absent(),
               }) => PaymentsCompanion.insert(
                 id: id,
                 profileId: profileId,
@@ -18589,6 +18837,7 @@ class $$PaymentsTableTableManager
                 amountCents: amountCents,
                 date: date,
                 note: note,
+                fromAccountId: fromAccountId,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -18598,7 +18847,7 @@ class $$PaymentsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({profileId = false}) {
+          prefetchHooksCallback: ({profileId = false, fromAccountId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -18629,6 +18878,17 @@ class $$PaymentsTableTableManager
                             .id,
                       ) as T;
                     }
+                    if (fromAccountId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.fromAccountId,
+                        referencedTable: $$PaymentsTableReferences
+                            ._fromAccountIdTable(db),
+                        referencedColumn: $$PaymentsTableReferences
+                            ._fromAccountIdTable(db)
+                            .id,
+                      ) as T;
+                    }
 
                     return state;
                   },
@@ -18653,7 +18913,7 @@ typedef $$PaymentsTableProcessedTableManager =
       $$PaymentsTableUpdateCompanionBuilder,
       (Payment, $$PaymentsTableReferences),
       Payment,
-      PrefetchHooks Function({bool profileId})
+      PrefetchHooks Function({bool profileId, bool fromAccountId})
     >;
 typedef $$NetWorthSnapshotsTableCreateCompanionBuilder =
     NetWorthSnapshotsCompanion Function({

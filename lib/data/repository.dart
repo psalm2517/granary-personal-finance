@@ -217,6 +217,13 @@ class HomebaseRepository {
         .write(const BillsCompanion(
             paymentSourceType: Value(null), paymentSourceId: Value(null)));
 
+    // Same for card/loan payments logged as paid from this account — the
+    // payment itself still happened and should survive.
+    await (_db.update(_db.payments)
+          ..where((p) =>
+              p.profileId.equals(profileId) & p.fromAccountId.equals(id)))
+        .write(const PaymentsCompanion(fromAccountId: Value(null)));
+
     // Recurring transfers naming this account as either side are removed by
     // the foreign key's cascade — a transfer with only one side left cannot
     // mean anything.
@@ -689,6 +696,9 @@ class HomebaseRepository {
   /// Logs a payment and reduces the balance it was made against in one go,
   /// so the card or loan, its utilization, and the net worth trend all move
   /// together. Balances are floored at zero rather than going negative.
+  /// When [fromAccountId] is set, the same amount also comes off that bank
+  /// or cash account — an actual withdrawal, not floored, same as any other
+  /// account-linked money movement.
   Future<void> addPayment({
     required int profileId,
     required PaymentAccountType accountType,
@@ -696,6 +706,7 @@ class HomebaseRepository {
     required int amountCents,
     DateTime? date,
     String? note,
+    int? fromAccountId,
   }) async {
     if (amountCents <= 0) {
       throw ArgumentError.value(
@@ -709,6 +720,7 @@ class HomebaseRepository {
             amountCents: amountCents,
             date: date ?? DateTime.now(),
             note: Value(note),
+            fromAccountId: Value(fromAccountId),
           ));
 
       switch (accountType) {
@@ -731,6 +743,10 @@ class HomebaseRepository {
           final next = (loan.balanceCents - amountCents).clamp(0, 1 << 62);
           await (_db.update(_db.loans)..where((l) => l.id.equals(accountId)))
               .write(LoansCompanion(balanceCents: Value(next)));
+      }
+
+      if (fromAccountId != null) {
+        await _adjustAccountBalance(fromAccountId, -amountCents);
       }
     });
     // Outside the transaction so the snapshot sees the committed balance.
@@ -768,6 +784,11 @@ class HomebaseRepository {
               .write(LoansCompanion(
                   balanceCents:
                       Value(loan.balanceCents + payment.amountCents)));
+      }
+
+      if (payment.fromAccountId != null) {
+        await _adjustAccountBalance(
+            payment.fromAccountId!, payment.amountCents);
       }
     });
     await recordNetWorthSnapshot(profileId: profileId);

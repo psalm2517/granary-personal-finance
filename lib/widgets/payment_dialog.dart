@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
 import '../main.dart';
+import '../screens/accounts.dart' show accountIcon, accountTypeColor;
 import '../util/money.dart';
 import 'common.dart';
 
@@ -33,6 +34,7 @@ Future<bool> showQuickPaymentDialog(
   WidgetRef ref, {
   required List<PayableAccount> accounts,
   PayableAccount? preselected,
+  List<Account> fromAccounts = const [],
 }) async {
   if (accounts.isEmpty) return false;
   var selected = preselected ?? accounts.first;
@@ -42,6 +44,7 @@ Future<bool> showQuickPaymentDialog(
           : (selected.suggestedCents! / 100).toStringAsFixed(2));
   final note = TextEditingController();
   var date = DateTime.now();
+  int? fromAccountId;
 
   final saved = await showDialog<bool>(
     context: context,
@@ -121,6 +124,33 @@ Future<bool> showQuickPaymentDialog(
               ]),
               const SizedBox(height: 12),
               DialogField(note, 'Note (optional)'),
+              if (fromAccounts.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int?>(
+                  initialValue: fromAccountId,
+                  decoration: const InputDecoration(
+                      labelText: 'Paid from (optional)',
+                      helperText: 'Also deducts this amount from the '
+                          'account\'s balance',
+                      border: OutlineInputBorder()),
+                  items: [
+                    const DropdownMenuItem(
+                        value: null, child: Text('Not linked')),
+                    for (final a in fromAccounts)
+                      DropdownMenuItem(
+                        value: a.id,
+                        child: Row(children: [
+                          Icon(accountIcon(a.type),
+                              size: 16,
+                              color: accountTypeColor(context, a.type)),
+                          const SizedBox(width: 8),
+                          Text(a.name),
+                        ]),
+                      ),
+                  ],
+                  onChanged: (v) => setLocal(() => fromAccountId = v),
+                ),
+              ],
             ]),
           ),
           actions: [
@@ -147,6 +177,7 @@ Future<bool> showQuickPaymentDialog(
         amountCents: cents,
         date: date,
         note: note.text.trim().isEmpty ? null : note.text.trim(),
+        fromAccountId: fromAccountId,
       );
   return true;
 }

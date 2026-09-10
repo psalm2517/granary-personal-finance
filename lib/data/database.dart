@@ -75,6 +75,12 @@ class Payments extends Table {
   IntColumn get amountCents => integer()();
   DateTimeColumn get date => dateTime()();
   TextColumn get note => text().nullable()();
+
+  /// The bank or cash account this payment actually came from, when known.
+  /// Optional — logging a payment still works without it, same as before;
+  /// setting it also deducts the amount from that account's balance.
+  IntColumn get fromAccountId =>
+      integer().nullable().references(Accounts, #id)();
 }
 
 /// Point-in-time record of net worth, so the trend can be charted. Written
@@ -432,7 +438,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -577,6 +583,14 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 17) {
             await m.addColumn(budgetEntries, budgetEntries.cardId);
+          }
+          if (from < 18) {
+            // Upgraders from before v10 already gained this column above —
+            // createTable(payments) there always uses the current (v18)
+            // Dart column set, so adding it again here would collide.
+            if (from >= 10) {
+              await m.addColumn(payments, payments.fromAccountId);
+            }
           }
         },
         beforeOpen: (details) async {

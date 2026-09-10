@@ -478,6 +478,16 @@ void main() {
         annual_fee_date INTEGER NULL);
     """);
     raw.execute("""
+      CREATE TABLE payments (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        account_type TEXT NOT NULL,
+        account_id INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        date INTEGER NOT NULL,
+        note TEXT NULL);
+    """);
+    raw.execute("""
       CREATE TABLE bills (
         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         profile_id INTEGER NOT NULL REFERENCES profiles (id),
@@ -575,6 +585,16 @@ void main() {
         annual_fee_date INTEGER NULL,
         statement_balance_cents INTEGER NOT NULL DEFAULT 0,
         minimum_payment_due_cents INTEGER NULL);
+    """);
+    raw.execute("""
+      CREATE TABLE payments (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        account_type TEXT NOT NULL,
+        account_id INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        date INTEGER NOT NULL,
+        note TEXT NULL);
     """);
     raw.execute("""
       CREATE TABLE bills (
