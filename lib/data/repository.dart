@@ -1859,14 +1859,21 @@ class HomebaseRepository {
     await recordNetWorthSnapshot(profileId: profileId);
   }
 
+  /// Every balance-moving feature that isn't the "Edit account" dialog
+  /// itself — transfers, account-linked entries, bill payments, card
+  /// payments paid from an account — goes through here, so the sparkline's
+  /// snapshot has to be kept up to date in this one place rather than at
+  /// each call site.
   Future<void> _adjustAccountBalance(int accountId, int deltaCents) async {
     final account = await (_db.select(_db.accounts)
           ..where((a) => a.id.equals(accountId)))
         .getSingleOrNull();
     if (account == null) return;
+    final next = account.balanceCents + deltaCents;
     await (_db.update(_db.accounts)..where((a) => a.id.equals(accountId)))
-        .write(AccountsCompanion(
-            balanceCents: Value(account.balanceCents + deltaCents)));
+        .write(AccountsCompanion(balanceCents: Value(next)));
+    await _recordAccountSnapshot(
+        profileId: account.profileId, accountId: accountId, balanceCents: next);
   }
 
   Future<void> _adjustCardBalance(int cardId, int deltaCents) async {
