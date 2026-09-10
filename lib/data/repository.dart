@@ -118,16 +118,23 @@ class HomebaseRepository {
           .watch();
 
   Future<int> upsertAccount(AccountsCompanion entry) async {
-    final id = await _db.into(_db.accounts).insertOnConflictUpdate(entry);
-    final account =
-        await (_db.select(_db.accounts)..where((a) => a.id.equals(id)))
-            .getSingle();
+    // Not insertOnConflictUpdate + a follow-up select by the returned id:
+    // when the upsert takes the update branch (an existing account being
+    // edited), the id it returns is last_insert_rowid(), which an UPDATE
+    // never changes — so it silently comes back as whatever unrelated row
+    // was last inserted on the connection, and selecting by it either
+    // grabs the wrong account or (once nothing matches) throws. Drift's
+    // own docs point at insertReturning for exactly this reason.
+    final account = await _db.into(_db.accounts).insertReturning(
+          entry,
+          onConflict: DoUpdate((_) => entry),
+        );
     await _recordAccountSnapshot(
         profileId: account.profileId,
-        accountId: id,
+        accountId: account.id,
         balanceCents: account.balanceCents);
     await recordNetWorthSnapshot(profileId: entry.profileId.value);
-    return id;
+    return account.id;
   }
 
   Future<void> _recordAccountSnapshot({

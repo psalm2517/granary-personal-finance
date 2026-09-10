@@ -117,6 +117,40 @@ void main() {
       expect(history.single.balanceCents, 15000);
     });
 
+    test(
+        'editing an account after something else was inserted still edits '
+        'the right one — regression for a stale last_insert_rowid() bug',
+        () async {
+      final target = await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Checking',
+          type: AccountType.checking,
+          balanceCents: const Value(10000)));
+      // Any insert after this — even on an unrelated row — used to make
+      // the edit below silently touch the wrong account (or throw), since
+      // insertOnConflictUpdate's update branch doesn't change
+      // last_insert_rowid().
+      await repo.upsertAccount(AccountsCompanion.insert(
+          profileId: profileId,
+          name: 'Savings',
+          type: AccountType.savings,
+          balanceCents: const Value(50000)));
+
+      await repo.upsertAccount(AccountsCompanion(
+        id: Value(target),
+        profileId: Value(profileId),
+        name: const Value('Checking'),
+        type: const Value(AccountType.checking),
+        balanceCents: const Value(99999),
+      ));
+
+      final accounts = await repo.watchAccounts(profileId: profileId).first;
+      expect(accounts.firstWhere((a) => a.id == target).balanceCents, 99999);
+      expect(accounts.firstWhere((a) => a.name == 'Savings').balanceCents,
+          50000,
+          reason: 'the other account must be untouched');
+    });
+
     test('recordAccountSnapshotsForToday covers every account without '
         'duplicating existing points', () async {
       final a = await repo.upsertAccount(AccountsCompanion.insert(
