@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -39,4 +42,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: build/linux/x64/release/granary-linux-x64-${{ github.ref_name }}.tar.gz
-          generate_release_notes: true
+          # No generate_release_notes here on purpose — release notes are
+          # drafted by hand and the release is normally already created
+          # (via `gh release create`) by the time this runs. This step's
+          # job is just attaching the binary, never touching the body.
+          fail_on_unmatched_files: true
