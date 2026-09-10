@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/database.dart';
-import '../data/repository.dart';
 import '../main.dart';
 import '../util/money.dart';
 import '../widgets/common.dart';
@@ -208,9 +207,7 @@ class TransfersScreen extends ConsumerWidget {
   Future<void> _transferNow(BuildContext context, WidgetRef ref) async {
     final repo = ref.read(repositoryProvider);
     final profileId = ref.read(activeProfileProvider)!.id;
-    final accounts = (await repo.watchAccounts(profileId: profileId).first)
-        .where((a) => HomebaseRepository.cashAccountTypes.contains(a.type))
-        .toList();
+    final accounts = await repo.watchAccounts(profileId: profileId).first;
     if (!context.mounted) return;
     if (accounts.length < 2) {
       warnNotSaved(context, 'you need at least two accounts to transfer '
@@ -312,16 +309,7 @@ class TransfersScreen extends ConsumerWidget {
       RecurringTransfer? existing) async {
     final repo = ref.read(repositoryProvider);
     final profileId = ref.read(activeProfileProvider)!.id;
-    // Retirement and investment accounts aren't something you'd manually
-    // transfer into or out of — left out of the picker, unless a transfer
-    // already uses one, so editing it doesn't strand the dropdown on a
-    // value with no matching item.
-    final accounts = (await repo.watchAccounts(profileId: profileId).first)
-        .where((a) =>
-            HomebaseRepository.cashAccountTypes.contains(a.type) ||
-            a.id == existing?.fromAccountId ||
-            a.id == existing?.toAccountId)
-        .toList();
+    final accounts = await repo.watchAccounts(profileId: profileId).first;
     if (!context.mounted) return;
     if (accounts.length < 2) {
       warnNotSaved(context, 'you need at least two accounts to transfer '
