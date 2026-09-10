@@ -140,7 +140,7 @@ update.
 
 Money is stored as integer cents throughout, never floating point.
 
-## Planned
+## Major Planned Features
 
 Android build
 
