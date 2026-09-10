@@ -1351,23 +1351,41 @@ class HomebaseRepository {
           (bills) => bills.fold(0, (sum, b) => sum + monthlyCostCents(b)));
 
   /// What the paychecks dated in [month] add up to, received or not, bonuses
-  /// included. This is the money you have to budget with for that month —
-  /// it does not start at zero and climb on each payday, and unlike a
-  /// schedule average it is exact: a bi-weekly month with three paydays
-  /// really does show three paychecks.
+  /// included, plus any income entered by hand rather than from a paycheck
+  /// schedule (sourcePaycheckId null) — a check that shows up with no
+  /// schedule behind it still counts toward what there is to budget with.
+  /// This is the money you have to budget with for that month — it does
+  /// not start at zero and climb on each payday, and unlike a schedule
+  /// average it is exact: a bi-weekly month with three paydays really does
+  /// show three paychecks.
   Stream<int> watchExpectedIncomeForMonth(
       {required int profileId, required DateTime month}) {
     final start = DateTime(month.year, month.month);
     final end = DateTime(month.year, month.month + 1);
-    return (_db.select(_db.paychecks)
+    final paychecks = (_db.select(_db.paychecks)
           ..where((p) =>
               p.profileId.equals(profileId) &
               p.dismissed.equals(false) &
               p.date.isBiggerOrEqualValue(start) &
               p.date.isSmallerThanValue(end)))
-        .watch()
-        .map((rows) =>
-            rows.fold(0, (s, p) => s + p.amountCents + p.bonusCents));
+        .watch();
+    final manualIncome = (_db.select(_db.budgetEntries)
+          ..where((e) =>
+              e.profileId.equals(profileId) &
+              e.type.equalsValue(EntryType.income) &
+              e.sourcePaycheckId.isNull() &
+              e.date.isBiggerOrEqualValue(start) &
+              e.date.isSmallerThanValue(end)))
+        .watch();
+    return combineLatest<dynamic>([paychecks, manualIncome]).map((data) {
+      final paycheckRows = data[0] as List<Paycheck>;
+      final entryRows = data[1] as List<BudgetEntry>;
+      final fromPaychecks = paycheckRows.fold(
+          0, (s, p) => s + p.amountCents + p.bonusCents);
+      final fromManualEntries =
+          entryRows.fold(0, (s, e) => s + e.amountCents);
+      return fromPaychecks + fromManualEntries;
+    });
   }
 
   /// Bills that actually charge in [month] — real cash out, matches what a

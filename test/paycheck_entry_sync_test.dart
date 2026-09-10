@@ -445,5 +445,49 @@ void main() {
               .first,
           0);
     });
+
+    test('income entered by hand, with no schedule behind it, still counts',
+        () async {
+      await repo.addBudgetEntry(BudgetEntriesCompanion.insert(
+        profileId: profileId,
+        date: DateTime(2026, 8, 10),
+        amountCents: 78578,
+        type: EntryType.income,
+        category: const Value('Work'),
+      ));
+
+      expect(
+          await repo
+              .watchExpectedIncomeForMonth(
+                  profileId: profileId, month: DateTime(2026, 8))
+              .first,
+          78578,
+          reason: 'an unscheduled check is still money to budget with');
+    });
+
+    test('a paycheck\'s own mirrored entry is not counted twice', () async {
+      final id = await repo.upsertPaycheck(PaychecksCompanion.insert(
+          profileId: profileId,
+          name: 'Day job',
+          date: DateTime(2026, 8, 14),
+          amountCents: 77500));
+      await repo.upsertPaycheck(PaychecksCompanion(
+        id: Value(id),
+        profileId: Value(profileId),
+        name: const Value('Day job'),
+        date: Value(DateTime(2026, 8, 14)),
+        amountCents: const Value(77500),
+        received: const Value(true),
+      ));
+
+      expect(
+          await repo
+              .watchExpectedIncomeForMonth(
+                  profileId: profileId, month: DateTime(2026, 8))
+              .first,
+          77500,
+          reason: 'the mirrored entry has sourcePaycheckId set, so it must '
+              'not be added again on top of the paycheck itself');
+    });
   });
 }
