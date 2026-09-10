@@ -800,7 +800,11 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
               TextField(
                 controller: description,
                 textInputAction: TextInputAction.next,
-                onSubmitted: (_) => Navigator.pop(context, true),
+                onSubmitted: (_) {
+                  if (parseDollarsToCents(amount.text) != null) {
+                    Navigator.pop(context, true);
+                  }
+                },
                 decoration: const InputDecoration(
                     labelText: 'Description', border: OutlineInputBorder()),
                 onChanged: (text) async {
@@ -820,7 +824,11 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
               const SizedBox(height: 12),
               TextField(
                   controller: amount,
-                  onSubmitted: (_) => Navigator.pop(context, true),
+                  onSubmitted: (_) {
+                  if (parseDollarsToCents(amount.text) != null) {
+                    Navigator.pop(context, true);
+                  }
+                },
                   onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
                       labelText: 'Amount (\$)',
@@ -829,7 +837,11 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
               if (!splitMode)
                 TextField(
                     controller: category,
-                    onSubmitted: (_) => Navigator.pop(context, true),
+                    onSubmitted: (_) {
+                  if (parseDollarsToCents(amount.text) != null) {
+                    Navigator.pop(context, true);
+                  }
+                },
                     onChanged: (_) => autoCategorized = false,
                     decoration: InputDecoration(
                         labelText: 'Category',
@@ -923,14 +935,22 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
               const SizedBox(height: 12),
               TextField(
                   controller: payee,
-                  onSubmitted: (_) => Navigator.pop(context, true),
+                  onSubmitted: (_) {
+                  if (parseDollarsToCents(amount.text) != null) {
+                    Navigator.pop(context, true);
+                  }
+                },
                   decoration: const InputDecoration(
                       labelText: 'Payee (optional)',
                       border: OutlineInputBorder())),
               const SizedBox(height: 12),
               TextField(
                   controller: tags,
-                  onSubmitted: (_) => Navigator.pop(context, true),
+                  onSubmitted: (_) {
+                  if (parseDollarsToCents(amount.text) != null) {
+                    Navigator.pop(context, true);
+                  }
+                },
                   decoration: const InputDecoration(
                       labelText: 'Tags (optional, comma separated)',
                       border: OutlineInputBorder())),
@@ -975,7 +995,9 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel')),
             FilledButton(
-                onPressed: () => Navigator.pop(context, true),
+                onPressed: parseDollarsToCents(amount.text) == null
+                    ? null
+                    : () => Navigator.pop(context, true),
                 child: Text(existing == null ? 'Save' : 'Save changes')),
           ],
         ),
