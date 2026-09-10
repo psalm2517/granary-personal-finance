@@ -117,7 +117,6 @@ class IncomeSankeyChart extends StatelessWidget {
       painter: _SankeyPainter(
         nodes: nodes,
         links: links,
-        totalIncomeCents: totalIncome,
         textColor: scheme.onSurface,
         mutedColor: scheme.onSurfaceVariant,
       ),
@@ -129,14 +128,12 @@ class _SankeyPainter extends CustomPainter {
   _SankeyPainter({
     required this.nodes,
     required this.links,
-    required this.totalIncomeCents,
     required this.textColor,
     required this.mutedColor,
   });
 
   final List<_SankeyNode> nodes;
   final List<_SankeyLink> links;
-  final int totalIncomeCents;
   final Color textColor;
   final Color mutedColor;
 
@@ -150,6 +147,16 @@ class _SankeyPainter extends CustomPainter {
     for (var i = 0; i < nodes.length; i++) {
       byColumn.putIfAbsent(nodes[i].column, () => []).add(i);
     }
+
+    // Each node's percentage is of its own column's total, not of income —
+    // column 0 is "share of income sources", column 2 is "share of where
+    // it actually went". If spending exceeds income, column 2's shares
+    // still correctly sum to 100%, rather than each being computed against
+    // income and the total silently exceeding it.
+    final columnTotals = <int, int>{
+      for (final entry in byColumn.entries)
+        entry.key: entry.value.fold<int>(0, (s, i) => s + nodes[i].amountCents),
+    };
 
     // One shared scale (pixels per cent) so a link's thickness always
     // matches the node it meets on either end — the tightest-packed column
@@ -216,7 +223,8 @@ class _SankeyPainter extends CustomPainter {
       );
       if (rect.height < _minLabelHeight) continue;
 
-      final pct = n.amountCents / totalIncomeCents * 100;
+      final columnTotal = columnTotals[n.column] ?? 0;
+      final pct = columnTotal == 0 ? 0.0 : n.amountCents / columnTotal * 100;
       final label = TextPainter(
         text: TextSpan(children: [
           TextSpan(
