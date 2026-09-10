@@ -1195,6 +1195,66 @@ class HomebaseRepository {
     return rows;
   }
 
+  /// Real money movements this month that categorized spending alone
+  /// misses: transfers out of your own accounts, and card/loan payments
+  /// actually paid from one. The cash flow chart folds these in as their
+  /// own real destinations instead of lumping them into an unexplained
+  /// leftover — every dollar that actually left an account this month has
+  /// somewhere to point to.
+  Stream<Map<String, int>> watchRealMoneyMovementsForMonth({
+    required int profileId,
+    required DateTime month,
+  }) {
+    final start = DateTime(month.year, month.month);
+    final end = DateTime(month.year, month.month + 1);
+
+    final transfers = (_db.select(_db.transferLogs).join([
+      innerJoin(_db.recurringTransfers,
+          _db.recurringTransfers.id.equalsExp(_db.transferLogs.transferId)),
+      innerJoin(_db.accounts,
+          _db.accounts.id.equalsExp(_db.recurringTransfers.toAccountId)),
+    ])
+          ..where(_db.transferLogs.profileId.equals(profileId) &
+              _db.transferLogs.date.isBiggerOrEqualValue(start) &
+              _db.transferLogs.date.isSmallerThanValue(end)))
+        .watch();
+    final payments = (_db.select(_db.payments)
+          ..where((p) =>
+              p.profileId.equals(profileId) &
+              p.fromAccountId.isNotNull() &
+              p.date.isBiggerOrEqualValue(start) &
+              p.date.isSmallerThanValue(end)))
+        .watch();
+    final cards = watchCards(profileId: profileId);
+    final loans = watchLoans(profileId: profileId);
+
+    return combineLatest<dynamic>([transfers, payments, cards, loans])
+        .map((data) {
+      final transferRows = data[0] as List<TypedResult>;
+      final paymentRows = data[1] as List<Payment>;
+      final cardRows = data[2] as List<CreditCard>;
+      final loanRows = data[3] as List<Loan>;
+
+      final result = <String, int>{};
+      for (final row in transferRows) {
+        final log = row.readTable(_db.transferLogs);
+        final toAccount = row.readTable(_db.accounts);
+        final label = 'Transfer to ${toAccount.name}';
+        result[label] = (result[label] ?? 0) + log.amountCents;
+      }
+      for (final payment in paymentRows) {
+        final label = switch (payment.accountType) {
+          PaymentAccountType.card => 'Card payment — '
+              '${cardRows.where((c) => c.id == payment.accountId).firstOrNull?.name ?? 'deleted card'}',
+          PaymentAccountType.loan => 'Loan payment — '
+              '${loanRows.where((l) => l.id == payment.accountId).firstOrNull?.name ?? 'deleted loan'}',
+        };
+        result[label] = (result[label] ?? 0) + payment.amountCents;
+      }
+      return result;
+    });
+  }
+
   // ---- Budget targets (spent-vs-target) ----
 
   Stream<List<BudgetTarget>> watchBudgetTargets({required int profileId}) =>
@@ -1427,6 +1487,15 @@ class HomebaseRepository {
         .where((b) => billFallsIn(b, periodStart))
         .fold(0, (sum, b) => sum + b.amountCents));
   }
+
+  /// Of the bills due in [month], just the ones actually marked (or
+  /// autopay-materialized) paid — the subset that has really posted, unlike
+  /// [watchBillsDueThisMonthCents] which counts everything due whether or
+  /// not it has been paid yet.
+  Stream<int> watchBillsPaidThisMonthCents(
+          {required int profileId, required DateTime month}) =>
+      watchBillsForMonth(profileId: profileId, month: month).map((rows) =>
+          rows.where((r) => r.paid).fold(0, (sum, r) => sum + r.bill.amountCents));
 
   /// Monthly card fees actually charged every month — just the monthly fee.
   /// Annual fees aren't tied to a known month in Granary, so they live

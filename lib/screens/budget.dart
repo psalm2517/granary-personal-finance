@@ -59,6 +59,10 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
           repo.watchReserveForCardFeesCents(profileId: profileId),
           repo.watchEntryTagNames(profileId: profileId),
           repo.watchSplitsByEntry(profileId: profileId),
+          repo.watchBillsPaidThisMonthCents(
+              profileId: profileId, month: _month),
+          repo.watchRealMoneyMovementsForMonth(
+              profileId: profileId, month: _month),
         ]),
         builder: (context, snap) {
           if (!snap.hasData) return const SizedBox.shrink();
@@ -70,7 +74,16 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
           final tagsByEntry = snap.data![7] as Map<int, List<String>>;
           final splitsByEntry =
               snap.data![8] as Map<int, List<TransactionSplit>>;
-          return _body(context, entries, targets, expectedIncome, billsDue,
+          final billsPaid = snap.data![9] as int;
+          final realMovements = snap.data![10] as Map<String, int>;
+          return _body(
+              context,
+              entries,
+              targets,
+              expectedIncome,
+              billsDue,
+              billsPaid,
+              realMovements,
               setAside, tagsByEntry, splitsByEntry, scheme);
         },
       ),
@@ -83,6 +96,8 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
       List<BudgetTarget> targets,
       int expectedIncomeCents,
       int billsDueCents,
+      int billsPaidCents,
+      Map<String, int> realMovements,
       int setAsideCents,
       Map<int, List<String>> tagsByEntry,
       Map<int, List<TransactionSplit>> splitsByEntry,
@@ -163,8 +178,8 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                   value: fmtCents(moneyOut),
                   icon: Icons.arrow_upward,
                   color: scheme.error,
-                  note: billsDueCents > 0
-                      ? '${fmtCents(billsDueCents)} of bills due this month'
+                  note: billsPaidCents > 0
+                      ? '${fmtCents(billsPaidCents)} of that is bills paid'
                       : null,
                 ),
                 StatCard(
@@ -262,7 +277,7 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                   ),
                 ),
               ),
-              if (moneyIn > 0 || moneyOut > 0) ...[
+              if (moneyIn > 0 || moneyOut > 0 || realMovements.isNotEmpty) ...[
                 kSectionGap,
                 SectionHeader('Cash flow',
                     icon: Icons.alt_route,
@@ -272,11 +287,13 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                         'Where this month\'s money came from on the left, '
                             'and where it went on the right — income sources '
                             'flow into a single total, which then splits '
-                            'across spending categories.',
-                        'Whatever is left over flows out as Savings. If '
-                            'spending exceeds income this month, Savings '
-                            'drops out and the categories on the right simply '
-                            'add up to more than what came in.',
+                            'across spending categories, transfers to your '
+                            'other accounts, and card or loan payments made '
+                            'from an account.',
+                        'Whatever is left over flows out as Savings — money '
+                            'that hasn\'t been spent, transferred, or put '
+                            'toward a payment, so it is genuinely still '
+                            'sitting in an account, not a guess.',
                       ],
                     )),
                 Card(
@@ -286,8 +303,15 @@ class _BudgetScreenState extends ConsumerState<BudgetScreen> {
                       height: 320,
                       child: IncomeSankeyChart(
                         incomeByCategory: incomeByCategory,
-                        expenseByCategory: spentByCategory,
-                        leftoverCents: moneyIn - moneyOut,
+                        expenseByCategory: {
+                          ...spentByCategory,
+                          for (final entry in realMovements.entries)
+                            entry.key:
+                                (spentByCategory[entry.key] ?? 0) + entry.value,
+                        },
+                        leftoverCents: moneyIn -
+                            moneyOut -
+                            realMovements.values.fold(0, (s, v) => s + v),
                       ),
                     ),
                   ),
