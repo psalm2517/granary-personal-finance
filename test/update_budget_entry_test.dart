@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:granary/data/database.dart';
-import 'package:granary/data/repository.dart';
+import 'package:clearly/data/database.dart';
+import 'package:clearly/data/repository.dart';
 
 void main() {
   late AppDatabase db;

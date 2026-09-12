@@ -36,12 +36,12 @@ jobs:
       - name: Package
         run: |
           cd build/linux/x64/release
-          tar czf granary-linux-x64-${{ github.ref_name }}.tar.gz bundle/
+          tar czf clearly-linux-x64-${{ github.ref_name }}.tar.gz bundle/
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/linux/x64/release/granary-linux-x64-${{ github.ref_name }}.tar.gz
+          files: build/linux/x64/release/clearly-linux-x64-${{ github.ref_name }}.tar.gz
           # No generate_release_notes here on purpose — release notes are
           # drafted by hand and the release is normally already created
           # (via `gh release create`) by the time this runs. This step's

@@ -1,4 +1,4 @@
-name: granary
+name: clearly
 description: "A local-only personal money tracker for a household: accounts, cards, loans, bills, budget, paychecks and goals, with per-profile privacy and no cloud."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.

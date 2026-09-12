@@ -35,7 +35,7 @@ class BackupException implements Exception {
   String toString() => message;
 }
 
-/// Exports and restores Granary data as JSON.
+/// Exports and restores Clearly data as JSON.
 ///
 /// JSON rather than a copy of the SQLite file for three reasons: it can be
 /// scoped to one profile (the file cannot, since tables are not partitioned
@@ -145,7 +145,7 @@ class BackupService {
     final profileRows = (data['profiles'] as List).cast<Map<String, Object?>>();
 
     return const JsonEncoder.withIndent('  ').convert({
-      'granary': {
+      'clearly': {
         'formatVersion': formatVersion,
         'schemaVersion': _db.schemaVersion,
         'exportedAt': DateTime.now().toIso8601String(),
@@ -167,20 +167,21 @@ class BackupService {
       throw BackupException('That file is not valid JSON.');
     }
 
-    // Older backups (written before the Granary rename) carry the header
-    // under the old key — still readable, so renaming the app doesn't
-    // strand anyone's existing backup file.
-    final header = decoded['granary'] ?? decoded['homebase'];
+    // Older backups (written before a rename) carry the header under an
+    // old key — still readable, so renaming the app doesn't strand anyone's
+    // existing backup file.
+    final header =
+        decoded['clearly'] ?? decoded['granary'] ?? decoded['homebase'];
     final data = decoded['data'];
     if (header is! Map || data is! Map) {
       throw BackupException(
-          'That does not look like a Granary backup file.');
+          'That does not look like a Clearly backup file.');
     }
     final format = header['formatVersion'];
     if (format is! int || format > formatVersion) {
       throw BackupException(
-          'This backup was written by a newer version of Granary '
-          '(format $format). Update Granary and try again.');
+          'This backup was written by a newer version of Clearly '
+          '(format $format). Update Clearly and try again.');
     }
 
     final profiles = (header['profiles'] as List? ?? [])
@@ -218,7 +219,7 @@ class BackupService {
     if (summary.schemaVersion > _db.schemaVersion) {
       throw BackupException(
           'This backup came from a newer database (v${summary.schemaVersion}) '
-          'than this copy of Granary understands (v${_db.schemaVersion}).');
+          'than this copy of Clearly understands (v${_db.schemaVersion}).');
     }
 
     final decoded = jsonDecode(json) as Map<String, dynamic>;

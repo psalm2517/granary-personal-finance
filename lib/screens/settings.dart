@@ -39,7 +39,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             info: const InfoButton(
               title: 'Catppuccin flavors',
               body: [
-                'Granary uses the Catppuccin palette, which comes in four '
+                'Clearly uses the Catppuccin palette, which comes in four '
                     'flavors: Latte is the light one, and Frappé, Macchiato '
                     'and Mocha get progressively darker and higher contrast.',
                 'Colours come from the official Catppuccin package rather '
@@ -161,19 +161,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             info: InfoButton(
               title: 'How backups work',
               body: [
-                'Granary keeps everything on this computer — there is no '
+                'Clearly keeps everything on this computer — there is no '
                     'cloud and nothing is uploaded. A backup writes a file '
                     'wherever you choose, and looking after that file is up '
                     'to you: another drive, or a folder you sync yourself.',
                 'The file is JSON, so it is readable and can be checked or '
                     'repaired by hand if it ever comes to that. It records '
                     'the schema version it came from, so an older backup can '
-                    'still be understood after Granary changes.',
+                    'still be understood after Clearly changes.',
                 loggedIn.isAdmin
                     ? 'As an admin, your backup covers every profile in the '
                         'household.'
                     : 'Your backup covers your own data only.',
-                'Restoring replaces what is there. Granary copies the '
+                'Restoring replaces what is there. Clearly copies the '
                     'current database next to itself first, so a mistaken '
                     'restore can still be undone by hand.',
               ],
@@ -238,7 +238,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final loggedIn = ref.read(loggedInProfileProvider)!;
 
     final file = await openFile(acceptedTypeGroups: const [
-      XTypeGroup(label: 'Granary backup', extensions: ['json']),
+      XTypeGroup(label: 'Clearly backup', extensions: ['json']),
     ]);
     if (file == null) return;
 

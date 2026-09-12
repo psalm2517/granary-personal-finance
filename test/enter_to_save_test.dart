@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:granary/widgets/common.dart';
+import 'package:clearly/widgets/common.dart';
 
 /// Opens a dialog shaped like the app's edit dialogs and returns its result.
 Future<bool?> _showTestDialog(WidgetTester tester,

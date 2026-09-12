@@ -1,9 +1,9 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:granary/data/backup.dart';
-import 'package:granary/data/database.dart';
-import 'package:granary/data/repository.dart';
+import 'package:clearly/data/backup.dart';
+import 'package:clearly/data/database.dart';
+import 'package:clearly/data/repository.dart';
 
 void main() {
   late AppDatabase db;
@@ -271,7 +271,7 @@ void main() {
         throwsA(isA<BackupException>()));
   });
 
-  test('a backup from a newer Homebase is refused', () async {
+  test('a backup from a newer version is refused', () async {
     await populate(owner, 'owner');
     final json = await backup.exportJson(profileIds: [owner]);
     final tampered = json.replaceFirst(

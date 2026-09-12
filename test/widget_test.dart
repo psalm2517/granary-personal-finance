@@ -2,8 +2,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:granary/data/database.dart';
-import 'package:granary/main.dart';
+import 'package:clearly/data/database.dart';
+import 'package:clearly/main.dart';
 
 void main() {
   testWidgets('first run shows profile setup', (tester) async {
@@ -11,9 +11,9 @@ void main() {
     addTearDown(db.close);
     await tester.pumpWidget(ProviderScope(
       overrides: [databaseProvider.overrideWithValue(db)],
-      child: const GranaryApp(),
+      child: const ClearlyApp(),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to Granary'), findsOneWidget);
+    expect(find.text('Welcome to Clearly'), findsOneWidget);
   });
 }

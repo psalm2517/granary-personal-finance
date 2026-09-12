@@ -180,7 +180,7 @@ class _FirstRunSetupState extends ConsumerState<_FirstRunSetup> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Welcome to Granary',
+                Text('Welcome to Clearly',
                     style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 8),
                 Text(

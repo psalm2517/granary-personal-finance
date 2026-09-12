@@ -100,7 +100,7 @@ class GoalsScreen extends ConsumerWidget {
                           'gone. Each goal tracks what you have put aside '
                           'against the target.',
                       'Progress is manual: use "Add progress" whenever you '
-                          'move money toward it. Granary does not guess, '
+                          'move money toward it. Clearly does not guess, '
                           'because the money usually sits in an account it '
                           'cannot tell apart from the rest.',
                       'Give a goal a target date and it works out what you '

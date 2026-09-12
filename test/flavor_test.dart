@@ -1,7 +1,7 @@
 import 'package:catppuccin_flutter/catppuccin_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:granary/theme/catppuccin.dart';
+import 'package:clearly/theme/catppuccin.dart';
 
 void main() {
   test('all five flavors are available', () {

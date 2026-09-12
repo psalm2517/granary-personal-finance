@@ -31,18 +31,18 @@ final activeProfileProvider = StateProvider<Profile?>((ref) {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.instance.init();
-  runApp(const ProviderScope(child: GranaryApp()));
+  runApp(const ProviderScope(child: ClearlyApp()));
 }
 
-class GranaryApp extends ConsumerWidget {
-  const GranaryApp({super.key});
+class ClearlyApp extends ConsumerWidget {
+  const ClearlyApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final flavor = ref.watch(flavorProvider);
     final accent = ref.watch(accentProvider);
     return MaterialApp(
-      title: 'Granary',
+      title: 'Clearly',
       // One theme, built from the chosen flavor and accent — the platform's
       // own light/dark setting does not override an explicit choice.
       theme: themeFor(flavor, accent),

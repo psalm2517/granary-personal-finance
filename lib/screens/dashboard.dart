@@ -195,7 +195,7 @@ class DashboardScreen extends ConsumerWidget {
                           'and are worth deciding about — keep the card or '
                           'cancel before it charges — while there is still '
                           'time to act.',
-                      'A desktop notification is also shown when Granary '
+                      'A desktop notification is also shown when Clearly '
                           'opens and finds something due. Notifications '
                           'cannot fire while the app is closed, so treat '
                           'this panel as the reliable version.',
@@ -377,7 +377,7 @@ class DashboardScreen extends ConsumerWidget {
                       'Your net worth recorded over time, so you can see '
                           'the direction rather than just today\'s number.',
                       'One point is kept per day. It is written when you '
-                          'open Granary on a new day, and updated '
+                          'open Clearly on a new day, and updated '
                           'whenever a balance changes — so editing a '
                           'balance corrects today\'s figure rather than '
                           'adding a second point.',
@@ -405,7 +405,7 @@ class DashboardScreen extends ConsumerWidget {
                           title: 'No history yet',
                           message:
                               'Add an account, card or loan and '
-                              'Granary starts recording your net worth.',
+                              'Clearly starts recording your net worth.',
                         )
                       : _dashRow(
                           _NetWorthHero(
@@ -483,7 +483,7 @@ class DashboardScreen extends ConsumerWidget {
                           'month. This is where checking, savings and cash '
                           'is headed over the next 60 days, not a '
                           'prediction of unplanned spending, just what '
-                          'Granary already knows is coming: scheduled '
+                          'Clearly already knows is coming: scheduled '
                           'paychecks and bills.',
                       'Investment, retirement and other account types are '
                           'left out, the same way the Accounts screen splits '
@@ -492,7 +492,7 @@ class DashboardScreen extends ConsumerWidget {
                       'Card and loan payments, and anything not entered as '
                           'a bill or a paycheck schedule, are not included. '
                           'This gets more accurate the more of your '
-                          'recurring money is set up in Granary.',
+                          'recurring money is set up in Clearly.',
                     ],
                   ),
                 ),
@@ -564,7 +564,7 @@ class DashboardScreen extends ConsumerWidget {
                             'credit score. Under 10% is better still.',
                         'It is measured both per card and across all cards, so '
                             'one maxed-out card can hurt even if your overall '
-                            'number looks fine. Granary flags anything above '
+                            'number looks fine. Clearly flags anything above '
                             '30% in red.',
                         'Note that what the bureaus actually score you on is '
                             'the balance on your last statement, which can lag '
@@ -775,7 +775,7 @@ class DashboardScreen extends ConsumerWidget {
                       title: 'Credit score trend',
                       body: [
                         'Your score over time, from snapshots you log '
-                            'yourself. Granary has no connection to a credit '
+                            'yourself. Clearly has no connection to a credit '
                             'bureau, so nothing appears here until you enter '
                             'it — check your card issuer or a free service '
                             'and log what it says.',
@@ -927,7 +927,7 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   /// Records what a bureau or card issuer currently reports. Utilization is
-  /// prefilled from the cards already in Granary so the snapshot agrees
+  /// prefilled from the cards already in Clearly so the snapshot agrees
   /// with the utilization shown above, but stays editable — the figure a
   /// bureau used may differ from what the cards say today.
   Future<void> _logScore(BuildContext context, WidgetRef ref) async {
@@ -965,7 +965,7 @@ class DashboardScreen extends ConsumerWidget {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'From your card issuer, bank or a free credit app — '
-                        'Granary cannot fetch this for you.',
+                        'Clearly cannot fetch this for you.',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -1149,7 +1149,7 @@ class _NetWorthHero extends StatelessWidget {
         if (history.length < 2)
           Text(
             'One day recorded so far. A line appears once there is a '
-            'second day — Granary keeps one point per day, so editing a '
+            'second day — Clearly keeps one point per day, so editing a '
             'balance today updates this figure rather than adding a point.',
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: scheme.onSurfaceVariant),

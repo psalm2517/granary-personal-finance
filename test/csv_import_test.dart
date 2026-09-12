@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:granary/data/csv_import.dart';
+import 'package:clearly/data/csv_import.dart';
 
 void main() {
   group('readCsvTable', () {

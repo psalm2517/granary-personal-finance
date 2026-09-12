@@ -1,4 +1,4 @@
-package dev.granary.granary
+package dev.clearly.clearly
 
 import io.flutter.embedding.android.FlutterActivity
 

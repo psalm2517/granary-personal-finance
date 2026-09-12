@@ -290,7 +290,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final repo = ref.read(repositoryProvider);
     final stamp = DateTime.now().toIso8601String().split('T').first;
     final location = await getSaveLocation(
-      suggestedName: 'granary-transactions-$stamp.csv',
+      suggestedName: 'clearly-transactions-$stamp.csv',
       acceptedTypeGroups: const [
         XTypeGroup(label: 'CSV', extensions: ['csv']),
       ],

@@ -282,7 +282,7 @@ class HomebaseRepository {
 
   /// Records today's net worth, replacing today's row if one exists. Called
   /// after anything that moves a balance, and on app entry so a day with no
-  /// edits still gets a point once you open Granary.
+  /// edits still gets a point once you open Clearly.
   Future<void> recordNetWorthSnapshot({required int profileId}) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -982,7 +982,7 @@ class HomebaseRepository {
           .go();
 
   /// The utilization to suggest when logging a score: what your cards are
-  /// currently reporting. Saves retyping a figure Granary already knows,
+  /// currently reporting. Saves retyping a figure Clearly already knows,
   /// and keeps the logged snapshot consistent with the dashboard.
   Future<double> currentUtilization({required int profileId}) async {
     final cards = await watchCards(profileId: profileId).first;
@@ -1507,7 +1507,7 @@ class HomebaseRepository {
           rows.where((r) => r.paid).fold(0, (sum, r) => sum + r.bill.amountCents));
 
   /// Monthly card fees actually charged every month — just the monthly fee.
-  /// Annual fees aren't tied to a known month in Granary, so they live
+  /// Annual fees aren't tied to a known month in Clearly, so they live
   /// entirely in [watchReserveForCardFeesCents] rather than guessing when
   /// they land.
   Stream<int> watchCardFeesDueThisMonthCents({required int profileId}) =>
@@ -1977,10 +1977,10 @@ class HomebaseRepository {
   /// accounts — the money you can actually spend) starting from today's
   /// real balance, walking forward using what is already scheduled:
   /// paychecks and bills. This is not a prediction of unplanned spending —
-  /// only what Granary already knows is coming.
+  /// only what Clearly already knows is coming.
   ///
   /// Bills never touch an account's balance automatically anywhere in
-  /// Granary (balances are always edited by hand or by a logged payment),
+  /// Clearly (balances are always edited by hand or by a logged payment),
   /// so there is no risk of double-counting a bill that has already been
   /// marked paid this month — its cash effect only ever shows up here.
   Future<List<({DateTime date, int balanceCents})>> projectCashFlow({

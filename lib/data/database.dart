@@ -636,31 +636,32 @@ class AppDatabase extends _$AppDatabase {
   /// Where the database file lives, or null when it is in memory.
   Future<String?> get databasePath async {
     final dir = await getApplicationSupportDirectory();
-    final file = File(p.join(dir.path, 'granary.sqlite'));
+    final file = File(p.join(dir.path, 'clearly.sqlite'));
     return file.existsSync() ? file.path : null;
   }
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
       final dir = await getApplicationSupportDirectory();
-      final file = File(p.join(dir.path, 'granary.sqlite'));
+      final file = File(p.join(dir.path, 'clearly.sqlite'));
       await _migrateFromRename(file);
       return NativeDatabase.createInBackground(file);
     });
   }
 
-  /// The app has been renamed three times (homebase -> homebase_finance ->
-  /// homebase_money -> granary), and on Linux and Android the application id
-  /// decides where getApplicationSupportDirectory points, and each rename
-  /// also renamed the database file itself. Without this, a rename would
-  /// look to the user like their data had been wiped. Each previous
-  /// directory is checked newest first, so an install that skipped a rename
-  /// still finds its database.
+  /// The app has been renamed four times (homebase -> homebase_finance ->
+  /// homebase_money -> granary -> clearly), and on Linux and Android the
+  /// application id decides where getApplicationSupportDirectory points,
+  /// and each rename also renamed the database file itself. Without this,
+  /// a rename would look to the user like their data had been wiped. Each
+  /// previous directory is checked newest first, so an install that
+  /// skipped a rename still finds its database.
   static Future<void> _migrateFromRename(File newFile) async {
     if (newFile.existsSync()) return;
     try {
       final support = await getApplicationSupportDirectory();
       const previousDirs = [
+        ('dev.granary.granary', 'granary.sqlite'),
         ('dev.homebase.homebase_money', 'homebase.sqlite'),
         ('dev.homebase.homebase_finance', 'homebase.sqlite'),
         ('dev.homebase.homebase', 'homebase.sqlite'),
