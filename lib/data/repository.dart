@@ -2118,6 +2118,30 @@ class HomebaseRepository {
             ..orderBy([(b) => OrderingTerm.desc(b.importedAt)]))
           .watch();
 
+  /// Whether any entry from this batch has since been split or tagged —
+  /// undoing the import would silently take that manual work with it, so
+  /// the UI uses this to warn before deleting.
+  Future<bool> importBatchHasDownstreamEdits({required int batchId}) async {
+    final entryIds = await (_db.selectOnly(_db.budgetEntries)
+          ..addColumns([_db.budgetEntries.id])
+          ..where(_db.budgetEntries.importBatchId.equals(batchId)))
+        .map((row) => row.read(_db.budgetEntries.id)!)
+        .get();
+    if (entryIds.isEmpty) return false;
+
+    final splitCount = await (_db.selectOnly(_db.transactionSplits)
+          ..addColumns([_db.transactionSplits.id])
+          ..where(_db.transactionSplits.entryId.isIn(entryIds)))
+        .get();
+    if (splitCount.isNotEmpty) return true;
+
+    final tagCount = await (_db.selectOnly(_db.budgetEntryTags)
+          ..addColumns([_db.budgetEntryTags.id])
+          ..where(_db.budgetEntryTags.entryId.isIn(entryIds)))
+        .get();
+    return tagCount.isNotEmpty;
+  }
+
   /// Reverses a batch's balance adjustment (if it made one) and removes
   /// its entries — the same "undo the effect before deleting the record
   /// of it" shape as every other undo in this app.

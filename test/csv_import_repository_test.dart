@@ -203,6 +203,60 @@ void main() {
     });
   });
 
+  group('importBatchHasDownstreamEdits', () {
+    test('false right after import', () async {
+      final batchId = await repo.commitImport(
+          profileId: profileId,
+          accountId: accountId,
+          sourceFilename: 'chase.csv',
+          rows: sampleRows(),
+          updateAccountBalance: false);
+
+      expect(
+          await repo.importBatchHasDownstreamEdits(batchId: batchId), isFalse);
+    });
+
+    test('true once an imported entry is split', () async {
+      final batchId = await repo.commitImport(
+          profileId: profileId,
+          accountId: accountId,
+          sourceFilename: 'chase.csv',
+          rows: sampleRows(),
+          updateAccountBalance: false);
+      final entries = await repo
+          .watchBudgetForMonth(profileId: profileId, month: DateTime(2026, 8))
+          .first;
+      final coffee = entries.firstWhere((e) => e.description == 'Coffee Shop');
+
+      await repo.setEntrySplits(profileId: profileId, entryId: coffee.id, splits: [
+        (category: 'Dining', amountCents: 300),
+        (category: 'Household', amountCents: 150),
+      ]);
+
+      expect(
+          await repo.importBatchHasDownstreamEdits(batchId: batchId), isTrue);
+    });
+
+    test('true once an imported entry is tagged', () async {
+      final batchId = await repo.commitImport(
+          profileId: profileId,
+          accountId: accountId,
+          sourceFilename: 'chase.csv',
+          rows: sampleRows(),
+          updateAccountBalance: false);
+      final entries = await repo
+          .watchBudgetForMonth(profileId: profileId, month: DateTime(2026, 8))
+          .first;
+      final coffee = entries.firstWhere((e) => e.description == 'Coffee Shop');
+
+      await repo.setEntryTags(
+          profileId: profileId, entryId: coffee.id, tagNames: ['work']);
+
+      expect(
+          await repo.importBatchHasDownstreamEdits(batchId: batchId), isTrue);
+    });
+  });
+
   group('exportEntriesAsCsv', () {
     test('includes a header row and one row per entry', () async {
       await repo.commitImport(

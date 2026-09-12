@@ -335,10 +335,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                             '${b.rowCount} ${b.rowCount == 1 ? 'row' : 'rows'}'
                             '${b.balanceAdjustmentCents != 0 ? ' • balance updated' : ''}'),
                         trailing: TextButton(
-                          onPressed: () async {
-                            await repo.undoImportBatch(
-                                profileId: profileId, batchId: b.id);
-                          },
+                          onPressed: () =>
+                              _undoImportBatch(context, profileId, b),
                           child: const Text('Undo'),
                         ),
                       ),
@@ -355,5 +353,41 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _undoImportBatch(
+      BuildContext context, int profileId, ImportBatch batch) async {
+    final repo = ref.read(repositoryProvider);
+    final hasEdits =
+        await repo.importBatchHasDownstreamEdits(batchId: batch.id);
+    if (!context.mounted) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Undo this import?'),
+        content: Text(
+            '${batch.rowCount} ${batch.rowCount == 1 ? 'transaction' : 'transactions'} '
+            'from "${batch.sourceFilename}" will be removed'
+            '${batch.balanceAdjustmentCents != 0 ? ', and the balance change it made will be reversed' : ''}.'
+            '${hasEdits ? '\n\nSome of these transactions have since been split '
+                    'or tagged — that will be lost too.' : ''}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Undo import')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    await repo.undoImportBatch(profileId: profileId, batchId: batch.id);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Import undone')));
+    }
   }
 }
