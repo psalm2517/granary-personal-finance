@@ -11,8 +11,10 @@
 
 ### [⬇ Download for Linux](https://github.com/psalm2517/clearly-personal-finance/releases/download/v0.3.3/clearly-linux-x64-v0.3.3.tar.gz)
 
-Personal finance shouldn't be complicated, and knowing your financial health
-shouldn't cost you $15 a month. Clearly is a personal finance tracker for a
+__Personal finance shouldn't be complicated, and knowing your financial health
+shouldn't cost you $15 a month.__ 
+
+Clearly is a personal finance tracker for a
 household, built for the desktop. Everything stays on your own machine:
 there is no account to make, no server, and nothing is uploaded anywhere.
 
