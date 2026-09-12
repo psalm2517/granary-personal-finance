@@ -87,6 +87,7 @@ class BackupService {
         table: _db.paycheckAllocations,
         where: byProfileId,
       ),
+      (name: 'importBatches', table: _db.importBatches, where: byProfileId),
       (name: 'budgetEntries', table: _db.budgetEntries, where: byProfileId),
       (
         name: 'transactionSplits',

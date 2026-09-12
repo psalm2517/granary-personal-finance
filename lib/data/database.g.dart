@@ -4685,6 +4685,492 @@ class PaychecksCompanion extends UpdateCompanion<Paycheck> {
   }
 }
 
+class $ImportBatchesTable extends ImportBatches
+    with TableInfo<$ImportBatchesTable, ImportBatch> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ImportBatchesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _profileIdMeta = const VerificationMeta(
+    'profileId',
+  );
+  @override
+  late final GeneratedColumn<int> profileId = GeneratedColumn<int>(
+    'profile_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES profiles (id)',
+    ),
+  );
+  static const VerificationMeta _sourceFilenameMeta = const VerificationMeta(
+    'sourceFilename',
+  );
+  @override
+  late final GeneratedColumn<String> sourceFilename = GeneratedColumn<String>(
+    'source_filename',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _importedAtMeta = const VerificationMeta(
+    'importedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> importedAt = GeneratedColumn<DateTime>(
+    'imported_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rowCountMeta = const VerificationMeta(
+    'rowCount',
+  );
+  @override
+  late final GeneratedColumn<int> rowCount = GeneratedColumn<int>(
+    'row_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<int> accountId = GeneratedColumn<int>(
+    'account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES accounts (id)',
+    ),
+  );
+  static const VerificationMeta _balanceAdjustmentCentsMeta =
+      const VerificationMeta('balanceAdjustmentCents');
+  @override
+  late final GeneratedColumn<int> balanceAdjustmentCents = GeneratedColumn<int>(
+    'balance_adjustment_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    profileId,
+    sourceFilename,
+    importedAt,
+    rowCount,
+    accountId,
+    balanceAdjustmentCents,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'import_batches';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ImportBatch> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('profile_id')) {
+      context.handle(
+        _profileIdMeta,
+        profileId.isAcceptableOrUnknown(data['profile_id']!, _profileIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_profileIdMeta);
+    }
+    if (data.containsKey('source_filename')) {
+      context.handle(
+        _sourceFilenameMeta,
+        sourceFilename.isAcceptableOrUnknown(
+          data['source_filename']!,
+          _sourceFilenameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceFilenameMeta);
+    }
+    if (data.containsKey('imported_at')) {
+      context.handle(
+        _importedAtMeta,
+        importedAt.isAcceptableOrUnknown(data['imported_at']!, _importedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_importedAtMeta);
+    }
+    if (data.containsKey('row_count')) {
+      context.handle(
+        _rowCountMeta,
+        rowCount.isAcceptableOrUnknown(data['row_count']!, _rowCountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowCountMeta);
+    }
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    }
+    if (data.containsKey('balance_adjustment_cents')) {
+      context.handle(
+        _balanceAdjustmentCentsMeta,
+        balanceAdjustmentCents.isAcceptableOrUnknown(
+          data['balance_adjustment_cents']!,
+          _balanceAdjustmentCentsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ImportBatch map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ImportBatch(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      profileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}profile_id'],
+      )!,
+      sourceFilename: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_filename'],
+      )!,
+      importedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}imported_at'],
+      )!,
+      rowCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}row_count'],
+      )!,
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}account_id'],
+      ),
+      balanceAdjustmentCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}balance_adjustment_cents'],
+      )!,
+    );
+  }
+
+  @override
+  $ImportBatchesTable createAlias(String alias) {
+    return $ImportBatchesTable(attachedDatabase, alias);
+  }
+}
+
+class ImportBatch extends DataClass implements Insertable<ImportBatch> {
+  final int id;
+  final int profileId;
+  final String sourceFilename;
+  final DateTime importedAt;
+  final int rowCount;
+
+  /// The account these transactions were imported into. Not a foreign key
+  /// with cascade — deleting the account just clears this (see
+  /// deleteAccount), same as every other account link in this schema.
+  final int? accountId;
+
+  /// Net amount applied to [accountId]'s balance when this batch was
+  /// committed, or 0 if the import left the balance alone. Recorded here
+  /// rather than re-derived from the entries, so undo reverses exactly
+  /// what happened even if entries were edited afterward.
+  final int balanceAdjustmentCents;
+  const ImportBatch({
+    required this.id,
+    required this.profileId,
+    required this.sourceFilename,
+    required this.importedAt,
+    required this.rowCount,
+    this.accountId,
+    required this.balanceAdjustmentCents,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['profile_id'] = Variable<int>(profileId);
+    map['source_filename'] = Variable<String>(sourceFilename);
+    map['imported_at'] = Variable<DateTime>(importedAt);
+    map['row_count'] = Variable<int>(rowCount);
+    if (!nullToAbsent || accountId != null) {
+      map['account_id'] = Variable<int>(accountId);
+    }
+    map['balance_adjustment_cents'] = Variable<int>(balanceAdjustmentCents);
+    return map;
+  }
+
+  ImportBatchesCompanion toCompanion(bool nullToAbsent) {
+    return ImportBatchesCompanion(
+      id: Value(id),
+      profileId: Value(profileId),
+      sourceFilename: Value(sourceFilename),
+      importedAt: Value(importedAt),
+      rowCount: Value(rowCount),
+      accountId: accountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accountId),
+      balanceAdjustmentCents: Value(balanceAdjustmentCents),
+    );
+  }
+
+  factory ImportBatch.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ImportBatch(
+      id: serializer.fromJson<int>(json['id']),
+      profileId: serializer.fromJson<int>(json['profileId']),
+      sourceFilename: serializer.fromJson<String>(json['sourceFilename']),
+      importedAt: serializer.fromJson<DateTime>(json['importedAt']),
+      rowCount: serializer.fromJson<int>(json['rowCount']),
+      accountId: serializer.fromJson<int?>(json['accountId']),
+      balanceAdjustmentCents: serializer.fromJson<int>(
+        json['balanceAdjustmentCents'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'profileId': serializer.toJson<int>(profileId),
+      'sourceFilename': serializer.toJson<String>(sourceFilename),
+      'importedAt': serializer.toJson<DateTime>(importedAt),
+      'rowCount': serializer.toJson<int>(rowCount),
+      'accountId': serializer.toJson<int?>(accountId),
+      'balanceAdjustmentCents': serializer.toJson<int>(balanceAdjustmentCents),
+    };
+  }
+
+  ImportBatch copyWith({
+    int? id,
+    int? profileId,
+    String? sourceFilename,
+    DateTime? importedAt,
+    int? rowCount,
+    Value<int?> accountId = const Value.absent(),
+    int? balanceAdjustmentCents,
+  }) => ImportBatch(
+    id: id ?? this.id,
+    profileId: profileId ?? this.profileId,
+    sourceFilename: sourceFilename ?? this.sourceFilename,
+    importedAt: importedAt ?? this.importedAt,
+    rowCount: rowCount ?? this.rowCount,
+    accountId: accountId.present ? accountId.value : this.accountId,
+    balanceAdjustmentCents:
+        balanceAdjustmentCents ?? this.balanceAdjustmentCents,
+  );
+  ImportBatch copyWithCompanion(ImportBatchesCompanion data) {
+    return ImportBatch(
+      id: data.id.present ? data.id.value : this.id,
+      profileId: data.profileId.present ? data.profileId.value : this.profileId,
+      sourceFilename: data.sourceFilename.present
+          ? data.sourceFilename.value
+          : this.sourceFilename,
+      importedAt: data.importedAt.present
+          ? data.importedAt.value
+          : this.importedAt,
+      rowCount: data.rowCount.present ? data.rowCount.value : this.rowCount,
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      balanceAdjustmentCents: data.balanceAdjustmentCents.present
+          ? data.balanceAdjustmentCents.value
+          : this.balanceAdjustmentCents,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ImportBatch(')
+          ..write('id: $id, ')
+          ..write('profileId: $profileId, ')
+          ..write('sourceFilename: $sourceFilename, ')
+          ..write('importedAt: $importedAt, ')
+          ..write('rowCount: $rowCount, ')
+          ..write('accountId: $accountId, ')
+          ..write('balanceAdjustmentCents: $balanceAdjustmentCents')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    profileId,
+    sourceFilename,
+    importedAt,
+    rowCount,
+    accountId,
+    balanceAdjustmentCents,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ImportBatch &&
+          other.id == this.id &&
+          other.profileId == this.profileId &&
+          other.sourceFilename == this.sourceFilename &&
+          other.importedAt == this.importedAt &&
+          other.rowCount == this.rowCount &&
+          other.accountId == this.accountId &&
+          other.balanceAdjustmentCents == this.balanceAdjustmentCents);
+}
+
+class ImportBatchesCompanion extends UpdateCompanion<ImportBatch> {
+  final Value<int> id;
+  final Value<int> profileId;
+  final Value<String> sourceFilename;
+  final Value<DateTime> importedAt;
+  final Value<int> rowCount;
+  final Value<int?> accountId;
+  final Value<int> balanceAdjustmentCents;
+  const ImportBatchesCompanion({
+    this.id = const Value.absent(),
+    this.profileId = const Value.absent(),
+    this.sourceFilename = const Value.absent(),
+    this.importedAt = const Value.absent(),
+    this.rowCount = const Value.absent(),
+    this.accountId = const Value.absent(),
+    this.balanceAdjustmentCents = const Value.absent(),
+  });
+  ImportBatchesCompanion.insert({
+    this.id = const Value.absent(),
+    required int profileId,
+    required String sourceFilename,
+    required DateTime importedAt,
+    required int rowCount,
+    this.accountId = const Value.absent(),
+    this.balanceAdjustmentCents = const Value.absent(),
+  }) : profileId = Value(profileId),
+       sourceFilename = Value(sourceFilename),
+       importedAt = Value(importedAt),
+       rowCount = Value(rowCount);
+  static Insertable<ImportBatch> custom({
+    Expression<int>? id,
+    Expression<int>? profileId,
+    Expression<String>? sourceFilename,
+    Expression<DateTime>? importedAt,
+    Expression<int>? rowCount,
+    Expression<int>? accountId,
+    Expression<int>? balanceAdjustmentCents,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (profileId != null) 'profile_id': profileId,
+      if (sourceFilename != null) 'source_filename': sourceFilename,
+      if (importedAt != null) 'imported_at': importedAt,
+      if (rowCount != null) 'row_count': rowCount,
+      if (accountId != null) 'account_id': accountId,
+      if (balanceAdjustmentCents != null)
+        'balance_adjustment_cents': balanceAdjustmentCents,
+    });
+  }
+
+  ImportBatchesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? profileId,
+    Value<String>? sourceFilename,
+    Value<DateTime>? importedAt,
+    Value<int>? rowCount,
+    Value<int?>? accountId,
+    Value<int>? balanceAdjustmentCents,
+  }) {
+    return ImportBatchesCompanion(
+      id: id ?? this.id,
+      profileId: profileId ?? this.profileId,
+      sourceFilename: sourceFilename ?? this.sourceFilename,
+      importedAt: importedAt ?? this.importedAt,
+      rowCount: rowCount ?? this.rowCount,
+      accountId: accountId ?? this.accountId,
+      balanceAdjustmentCents:
+          balanceAdjustmentCents ?? this.balanceAdjustmentCents,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (profileId.present) {
+      map['profile_id'] = Variable<int>(profileId.value);
+    }
+    if (sourceFilename.present) {
+      map['source_filename'] = Variable<String>(sourceFilename.value);
+    }
+    if (importedAt.present) {
+      map['imported_at'] = Variable<DateTime>(importedAt.value);
+    }
+    if (rowCount.present) {
+      map['row_count'] = Variable<int>(rowCount.value);
+    }
+    if (accountId.present) {
+      map['account_id'] = Variable<int>(accountId.value);
+    }
+    if (balanceAdjustmentCents.present) {
+      map['balance_adjustment_cents'] = Variable<int>(
+        balanceAdjustmentCents.value,
+      );
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ImportBatchesCompanion(')
+          ..write('id: $id, ')
+          ..write('profileId: $profileId, ')
+          ..write('sourceFilename: $sourceFilename, ')
+          ..write('importedAt: $importedAt, ')
+          ..write('rowCount: $rowCount, ')
+          ..write('accountId: $accountId, ')
+          ..write('balanceAdjustmentCents: $balanceAdjustmentCents')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $BudgetEntriesTable extends BudgetEntries
     with TableInfo<$BudgetEntriesTable, BudgetEntry> {
   @override
@@ -4832,6 +5318,20 @@ class $BudgetEntriesTable extends BudgetEntries
       'REFERENCES bill_payments (id) ON DELETE CASCADE',
     ),
   );
+  static const VerificationMeta _importBatchIdMeta = const VerificationMeta(
+    'importBatchId',
+  );
+  @override
+  late final GeneratedColumn<int> importBatchId = GeneratedColumn<int>(
+    'import_batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES import_batches (id) ON DELETE CASCADE',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4846,6 +5346,7 @@ class $BudgetEntriesTable extends BudgetEntries
     cardId,
     sourcePaycheckId,
     sourceBillPaymentId,
+    importBatchId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4940,6 +5441,15 @@ class $BudgetEntriesTable extends BudgetEntries
         ),
       );
     }
+    if (data.containsKey('import_batch_id')) {
+      context.handle(
+        _importBatchIdMeta,
+        importBatchId.isAcceptableOrUnknown(
+          data['import_batch_id']!,
+          _importBatchIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -4999,6 +5509,10 @@ class $BudgetEntriesTable extends BudgetEntries
         DriftSqlType.int,
         data['${effectivePrefix}source_bill_payment_id'],
       ),
+      importBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}import_batch_id'],
+      ),
     );
   }
 
@@ -5039,6 +5553,11 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
   /// Set when this entry was generated automatically because a bill was
   /// marked paid. Deleting the payment (or the bill) removes this entry.
   final int? sourceBillPaymentId;
+
+  /// Set when this entry came from a CSV import, so the whole batch can be
+  /// undone together. Imported entries deliberately do not move any
+  /// account or card balance on their own — see [ImportBatches].
+  final int? importBatchId;
   const BudgetEntry({
     required this.id,
     required this.profileId,
@@ -5052,6 +5571,7 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     this.cardId,
     this.sourcePaycheckId,
     this.sourceBillPaymentId,
+    this.importBatchId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5084,6 +5604,9 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     if (!nullToAbsent || sourceBillPaymentId != null) {
       map['source_bill_payment_id'] = Variable<int>(sourceBillPaymentId);
     }
+    if (!nullToAbsent || importBatchId != null) {
+      map['import_batch_id'] = Variable<int>(importBatchId);
+    }
     return map;
   }
 
@@ -5113,6 +5636,9 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
       sourceBillPaymentId: sourceBillPaymentId == null && nullToAbsent
           ? const Value.absent()
           : Value(sourceBillPaymentId),
+      importBatchId: importBatchId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(importBatchId),
     );
   }
 
@@ -5138,6 +5664,7 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
       sourceBillPaymentId: serializer.fromJson<int?>(
         json['sourceBillPaymentId'],
       ),
+      importBatchId: serializer.fromJson<int?>(json['importBatchId']),
     );
   }
   @override
@@ -5158,6 +5685,7 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
       'cardId': serializer.toJson<int?>(cardId),
       'sourcePaycheckId': serializer.toJson<int?>(sourcePaycheckId),
       'sourceBillPaymentId': serializer.toJson<int?>(sourceBillPaymentId),
+      'importBatchId': serializer.toJson<int?>(importBatchId),
     };
   }
 
@@ -5174,6 +5702,7 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     Value<int?> cardId = const Value.absent(),
     Value<int?> sourcePaycheckId = const Value.absent(),
     Value<int?> sourceBillPaymentId = const Value.absent(),
+    Value<int?> importBatchId = const Value.absent(),
   }) => BudgetEntry(
     id: id ?? this.id,
     profileId: profileId ?? this.profileId,
@@ -5191,6 +5720,9 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     sourceBillPaymentId: sourceBillPaymentId.present
         ? sourceBillPaymentId.value
         : this.sourceBillPaymentId,
+    importBatchId: importBatchId.present
+        ? importBatchId.value
+        : this.importBatchId,
   );
   BudgetEntry copyWithCompanion(BudgetEntriesCompanion data) {
     return BudgetEntry(
@@ -5214,6 +5746,9 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
       sourceBillPaymentId: data.sourceBillPaymentId.present
           ? data.sourceBillPaymentId.value
           : this.sourceBillPaymentId,
+      importBatchId: data.importBatchId.present
+          ? data.importBatchId.value
+          : this.importBatchId,
     );
   }
 
@@ -5231,7 +5766,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
           ..write('accountId: $accountId, ')
           ..write('cardId: $cardId, ')
           ..write('sourcePaycheckId: $sourcePaycheckId, ')
-          ..write('sourceBillPaymentId: $sourceBillPaymentId')
+          ..write('sourceBillPaymentId: $sourceBillPaymentId, ')
+          ..write('importBatchId: $importBatchId')
           ..write(')'))
         .toString();
   }
@@ -5250,6 +5786,7 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     cardId,
     sourcePaycheckId,
     sourceBillPaymentId,
+    importBatchId,
   );
   @override
   bool operator ==(Object other) =>
@@ -5266,7 +5803,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
           other.accountId == this.accountId &&
           other.cardId == this.cardId &&
           other.sourcePaycheckId == this.sourcePaycheckId &&
-          other.sourceBillPaymentId == this.sourceBillPaymentId);
+          other.sourceBillPaymentId == this.sourceBillPaymentId &&
+          other.importBatchId == this.importBatchId);
 }
 
 class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
@@ -5282,6 +5820,7 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
   final Value<int?> cardId;
   final Value<int?> sourcePaycheckId;
   final Value<int?> sourceBillPaymentId;
+  final Value<int?> importBatchId;
   const BudgetEntriesCompanion({
     this.id = const Value.absent(),
     this.profileId = const Value.absent(),
@@ -5295,6 +5834,7 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
     this.cardId = const Value.absent(),
     this.sourcePaycheckId = const Value.absent(),
     this.sourceBillPaymentId = const Value.absent(),
+    this.importBatchId = const Value.absent(),
   });
   BudgetEntriesCompanion.insert({
     this.id = const Value.absent(),
@@ -5309,6 +5849,7 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
     this.cardId = const Value.absent(),
     this.sourcePaycheckId = const Value.absent(),
     this.sourceBillPaymentId = const Value.absent(),
+    this.importBatchId = const Value.absent(),
   }) : profileId = Value(profileId),
        date = Value(date),
        amountCents = Value(amountCents),
@@ -5326,6 +5867,7 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
     Expression<int>? cardId,
     Expression<int>? sourcePaycheckId,
     Expression<int>? sourceBillPaymentId,
+    Expression<int>? importBatchId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -5341,6 +5883,7 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
       if (sourcePaycheckId != null) 'source_paycheck_id': sourcePaycheckId,
       if (sourceBillPaymentId != null)
         'source_bill_payment_id': sourceBillPaymentId,
+      if (importBatchId != null) 'import_batch_id': importBatchId,
     });
   }
 
@@ -5357,6 +5900,7 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
     Value<int?>? cardId,
     Value<int?>? sourcePaycheckId,
     Value<int?>? sourceBillPaymentId,
+    Value<int?>? importBatchId,
   }) {
     return BudgetEntriesCompanion(
       id: id ?? this.id,
@@ -5371,6 +5915,7 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
       cardId: cardId ?? this.cardId,
       sourcePaycheckId: sourcePaycheckId ?? this.sourcePaycheckId,
       sourceBillPaymentId: sourceBillPaymentId ?? this.sourceBillPaymentId,
+      importBatchId: importBatchId ?? this.importBatchId,
     );
   }
 
@@ -5415,6 +5960,9 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
     if (sourceBillPaymentId.present) {
       map['source_bill_payment_id'] = Variable<int>(sourceBillPaymentId.value);
     }
+    if (importBatchId.present) {
+      map['import_batch_id'] = Variable<int>(importBatchId.value);
+    }
     return map;
   }
 
@@ -5432,7 +5980,8 @@ class BudgetEntriesCompanion extends UpdateCompanion<BudgetEntry> {
           ..write('accountId: $accountId, ')
           ..write('cardId: $cardId, ')
           ..write('sourcePaycheckId: $sourcePaycheckId, ')
-          ..write('sourceBillPaymentId: $sourceBillPaymentId')
+          ..write('sourceBillPaymentId: $sourceBillPaymentId, ')
+          ..write('importBatchId: $importBatchId')
           ..write(')'))
         .toString();
   }
@@ -10293,6 +10842,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PaycheckSchedulesTable paycheckSchedules =
       $PaycheckSchedulesTable(this);
   late final $PaychecksTable paychecks = $PaychecksTable(this);
+  late final $ImportBatchesTable importBatches = $ImportBatchesTable(this);
   late final $BudgetEntriesTable budgetEntries = $BudgetEntriesTable(this);
   late final $BudgetTargetsTable budgetTargets = $BudgetTargetsTable(this);
   late final $CategoryRulesTable categoryRules = $CategoryRulesTable(this);
@@ -10327,6 +10877,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     creditScoreSnapshots,
     paycheckSchedules,
     paychecks,
+    importBatches,
     budgetEntries,
     budgetTargets,
     categoryRules,
@@ -10360,6 +10911,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'bill_payments',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('budget_entries', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'import_batches',
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('budget_entries', kind: UpdateKind.delete)],
@@ -10594,6 +11152,24 @@ final class $$ProfilesTableReferences
     ).filter((f) => f.profileId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_paychecksRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ImportBatchesTable, List<ImportBatch>>
+  _importBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.importBatches,
+    aliasName: 'profiles__id__import_batches__profile_id',
+  );
+
+  $$ImportBatchesTableProcessedTableManager get importBatchesRefs {
+    final manager = $$ImportBatchesTableTableManager(
+      $_db,
+      $_db.importBatches,
+    ).filter((f) => f.profileId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_importBatchesRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -11061,6 +11637,31 @@ class $$ProfilesTableFilterComposer
           }) => $$PaychecksTableFilterComposer(
             $db: $db,
             $table: $db.paychecks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> importBatchesRefs(
+    Expression<bool> Function($$ImportBatchesTableFilterComposer f) f,
+  ) {
+    final $$ImportBatchesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.importBatches,
+      getReferencedColumn: (t) => t.profileId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ImportBatchesTableFilterComposer(
+            $db: $db,
+            $table: $db.importBatches,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -11625,6 +12226,31 @@ class $$ProfilesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> importBatchesRefs<T extends Object>(
+    Expression<T> Function($$ImportBatchesTableAnnotationComposer a) f,
+  ) {
+    final $$ImportBatchesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.importBatches,
+      getReferencedColumn: (t) => t.profileId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ImportBatchesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.importBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> budgetEntriesRefs<T extends Object>(
     Expression<T> Function($$BudgetEntriesTableAnnotationComposer a) f,
   ) {
@@ -11954,6 +12580,7 @@ class $$ProfilesTableTableManager
             bool creditScoreSnapshotsRefs,
             bool paycheckSchedulesRefs,
             bool paychecksRefs,
+            bool importBatchesRefs,
             bool budgetEntriesRefs,
             bool budgetTargetsRefs,
             bool categoryRulesRefs,
@@ -12021,6 +12648,7 @@ class $$ProfilesTableTableManager
                 creditScoreSnapshotsRefs = false,
                 paycheckSchedulesRefs = false,
                 paychecksRefs = false,
+                importBatchesRefs = false,
                 budgetEntriesRefs = false,
                 budgetTargetsRefs = false,
                 categoryRulesRefs = false,
@@ -12045,6 +12673,7 @@ class $$ProfilesTableTableManager
                     if (creditScoreSnapshotsRefs) db.creditScoreSnapshots,
                     if (paycheckSchedulesRefs) db.paycheckSchedules,
                     if (paychecksRefs) db.paychecks,
+                    if (importBatchesRefs) db.importBatches,
                     if (budgetEntriesRefs) db.budgetEntries,
                     if (budgetTargetsRefs) db.budgetTargets,
                     if (categoryRulesRefs) db.categoryRules,
@@ -12223,6 +12852,27 @@ class $$ProfilesTableTableManager
                                 table,
                                 p0,
                               ).paychecksRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.profileId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (importBatchesRefs)
+                        await $_getPrefetchedData<
+                          Profile,
+                          $ProfilesTable,
+                          ImportBatch
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProfilesTableReferences
+                              ._importBatchesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProfilesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).importBatchesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.profileId == item.id,
@@ -12502,6 +13152,7 @@ typedef $$ProfilesTableProcessedTableManager =
         bool creditScoreSnapshotsRefs,
         bool paycheckSchedulesRefs,
         bool paychecksRefs,
+        bool importBatchesRefs,
         bool budgetEntriesRefs,
         bool budgetTargetsRefs,
         bool categoryRulesRefs,
@@ -12551,6 +13202,24 @@ final class $$AccountsTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$ImportBatchesTable, List<ImportBatch>>
+  _importBatchesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.importBatches,
+    aliasName: 'accounts__id__import_batches__account_id',
+  );
+
+  $$ImportBatchesTableProcessedTableManager get importBatchesRefs {
+    final manager = $$ImportBatchesTableTableManager(
+      $_db,
+      $_db.importBatches,
+    ).filter((f) => f.accountId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_importBatchesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -12692,6 +13361,31 @@ class $$AccountsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> importBatchesRefs(
+    Expression<bool> Function($$ImportBatchesTableFilterComposer f) f,
+  ) {
+    final $$ImportBatchesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.importBatches,
+      getReferencedColumn: (t) => t.accountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ImportBatchesTableFilterComposer(
+            $db: $db,
+            $table: $db.importBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> budgetEntriesRefs(
@@ -12905,6 +13599,31 @@ class $$AccountsTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> importBatchesRefs<T extends Object>(
+    Expression<T> Function($$ImportBatchesTableAnnotationComposer a) f,
+  ) {
+    final $$ImportBatchesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.importBatches,
+      getReferencedColumn: (t) => t.accountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ImportBatchesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.importBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> budgetEntriesRefs<T extends Object>(
     Expression<T> Function($$BudgetEntriesTableAnnotationComposer a) f,
   ) {
@@ -13023,6 +13742,7 @@ class $$AccountsTableTableManager
           Account,
           PrefetchHooks Function({
             bool profileId,
+            bool importBatchesRefs,
             bool budgetEntriesRefs,
             bool paymentsRefs,
             bool accountBalanceSnapshotsRefs,
@@ -13083,6 +13803,7 @@ class $$AccountsTableTableManager
           prefetchHooksCallback:
               ({
                 profileId = false,
+                importBatchesRefs = false,
                 budgetEntriesRefs = false,
                 paymentsRefs = false,
                 accountBalanceSnapshotsRefs = false,
@@ -13091,6 +13812,7 @@ class $$AccountsTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (importBatchesRefs) db.importBatches,
                     if (budgetEntriesRefs) db.budgetEntries,
                     if (paymentsRefs) db.payments,
                     if (accountBalanceSnapshotsRefs) db.accountBalanceSnapshots,
@@ -13128,6 +13850,27 @@ class $$AccountsTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (importBatchesRefs)
+                        await $_getPrefetchedData<
+                          Account,
+                          $AccountsTable,
+                          ImportBatch
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountsTableReferences
+                              ._importBatchesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).importBatchesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.accountId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (budgetEntriesRefs)
                         await $_getPrefetchedData<
                           Account,
@@ -13234,6 +13977,7 @@ typedef $$AccountsTableProcessedTableManager =
       Account,
       PrefetchHooks Function({
         bool profileId,
+        bool importBatchesRefs,
         bool budgetEntriesRefs,
         bool paymentsRefs,
         bool accountBalanceSnapshotsRefs,
@@ -16830,6 +17574,552 @@ typedef $$PaychecksTableProcessedTableManager =
         bool paycheckAllocationsRefs,
       })
     >;
+typedef $$ImportBatchesTableCreateCompanionBuilder =
+    ImportBatchesCompanion Function({
+      Value<int> id,
+      required int profileId,
+      required String sourceFilename,
+      required DateTime importedAt,
+      required int rowCount,
+      Value<int?> accountId,
+      Value<int> balanceAdjustmentCents,
+    });
+typedef $$ImportBatchesTableUpdateCompanionBuilder =
+    ImportBatchesCompanion Function({
+      Value<int> id,
+      Value<int> profileId,
+      Value<String> sourceFilename,
+      Value<DateTime> importedAt,
+      Value<int> rowCount,
+      Value<int?> accountId,
+      Value<int> balanceAdjustmentCents,
+    });
+
+final class $$ImportBatchesTableReferences
+    extends BaseReferences<_$AppDatabase, $ImportBatchesTable, ImportBatch> {
+  $$ImportBatchesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProfilesTable _profileIdTable(_$AppDatabase db) =>
+      db.profiles.createAlias('import_batches__profile_id__profiles__id');
+
+  $$ProfilesTableProcessedTableManager get profileId {
+    final $_column = $_itemColumn<int>('profile_id')!;
+
+    final manager = $$ProfilesTableTableManager(
+      $_db,
+      $_db.profiles,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_profileIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $AccountsTable _accountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias('import_batches__account_id__accounts__id');
+
+  $$AccountsTableProcessedTableManager? get accountId {
+    final $_column = $_itemColumn<int>('account_id');
+    if ($_column == null) return null;
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_accountIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$BudgetEntriesTable, List<BudgetEntry>>
+  _budgetEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.budgetEntries,
+    aliasName: 'import_batches__id__budget_entries__import_batch_id',
+  );
+
+  $$BudgetEntriesTableProcessedTableManager get budgetEntriesRefs {
+    final manager = $$BudgetEntriesTableTableManager(
+      $_db,
+      $_db.budgetEntries,
+    ).filter((f) => f.importBatchId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_budgetEntriesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$ImportBatchesTableFilterComposer
+    extends Composer<_$AppDatabase, $ImportBatchesTable> {
+  $$ImportBatchesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceFilename => $composableBuilder(
+    column: $table.sourceFilename,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get importedAt => $composableBuilder(
+    column: $table.importedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get rowCount => $composableBuilder(
+    column: $table.rowCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get balanceAdjustmentCents => $composableBuilder(
+    column: $table.balanceAdjustmentCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProfilesTableFilterComposer get profileId {
+    final $$ProfilesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.profileId,
+      referencedTable: $db.profiles,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProfilesTableFilterComposer(
+            $db: $db,
+            $table: $db.profiles,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableFilterComposer get accountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.accountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> budgetEntriesRefs(
+    Expression<bool> Function($$BudgetEntriesTableFilterComposer f) f,
+  ) {
+    final $$BudgetEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.budgetEntries,
+      getReferencedColumn: (t) => t.importBatchId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BudgetEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.budgetEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$ImportBatchesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ImportBatchesTable> {
+  $$ImportBatchesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceFilename => $composableBuilder(
+    column: $table.sourceFilename,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get importedAt => $composableBuilder(
+    column: $table.importedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get rowCount => $composableBuilder(
+    column: $table.rowCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get balanceAdjustmentCents => $composableBuilder(
+    column: $table.balanceAdjustmentCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProfilesTableOrderingComposer get profileId {
+    final $$ProfilesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.profileId,
+      referencedTable: $db.profiles,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProfilesTableOrderingComposer(
+            $db: $db,
+            $table: $db.profiles,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableOrderingComposer get accountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.accountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ImportBatchesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ImportBatchesTable> {
+  $$ImportBatchesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceFilename => $composableBuilder(
+    column: $table.sourceFilename,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get importedAt => $composableBuilder(
+    column: $table.importedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get rowCount =>
+      $composableBuilder(column: $table.rowCount, builder: (column) => column);
+
+  GeneratedColumn<int> get balanceAdjustmentCents => $composableBuilder(
+    column: $table.balanceAdjustmentCents,
+    builder: (column) => column,
+  );
+
+  $$ProfilesTableAnnotationComposer get profileId {
+    final $$ProfilesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.profileId,
+      referencedTable: $db.profiles,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProfilesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.profiles,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableAnnotationComposer get accountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.accountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> budgetEntriesRefs<T extends Object>(
+    Expression<T> Function($$BudgetEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$BudgetEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.budgetEntries,
+      getReferencedColumn: (t) => t.importBatchId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BudgetEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.budgetEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$ImportBatchesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ImportBatchesTable,
+          ImportBatch,
+          $$ImportBatchesTableFilterComposer,
+          $$ImportBatchesTableOrderingComposer,
+          $$ImportBatchesTableAnnotationComposer,
+          $$ImportBatchesTableCreateCompanionBuilder,
+          $$ImportBatchesTableUpdateCompanionBuilder,
+          (ImportBatch, $$ImportBatchesTableReferences),
+          ImportBatch,
+          PrefetchHooks Function({
+            bool profileId,
+            bool accountId,
+            bool budgetEntriesRefs,
+          })
+        > {
+  $$ImportBatchesTableTableManager(_$AppDatabase db, $ImportBatchesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ImportBatchesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ImportBatchesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ImportBatchesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> profileId = const Value.absent(),
+                Value<String> sourceFilename = const Value.absent(),
+                Value<DateTime> importedAt = const Value.absent(),
+                Value<int> rowCount = const Value.absent(),
+                Value<int?> accountId = const Value.absent(),
+                Value<int> balanceAdjustmentCents = const Value.absent(),
+              }) => ImportBatchesCompanion(
+                id: id,
+                profileId: profileId,
+                sourceFilename: sourceFilename,
+                importedAt: importedAt,
+                rowCount: rowCount,
+                accountId: accountId,
+                balanceAdjustmentCents: balanceAdjustmentCents,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int profileId,
+                required String sourceFilename,
+                required DateTime importedAt,
+                required int rowCount,
+                Value<int?> accountId = const Value.absent(),
+                Value<int> balanceAdjustmentCents = const Value.absent(),
+              }) => ImportBatchesCompanion.insert(
+                id: id,
+                profileId: profileId,
+                sourceFilename: sourceFilename,
+                importedAt: importedAt,
+                rowCount: rowCount,
+                accountId: accountId,
+                balanceAdjustmentCents: balanceAdjustmentCents,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ImportBatchesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                profileId = false,
+                accountId = false,
+                budgetEntriesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (budgetEntriesRefs) db.budgetEntries,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (profileId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.profileId,
+                            referencedTable: $$ImportBatchesTableReferences
+                                ._profileIdTable(db),
+                            referencedColumn: $$ImportBatchesTableReferences
+                                ._profileIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+                        if (accountId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.accountId,
+                            referencedTable: $$ImportBatchesTableReferences
+                                ._accountIdTable(db),
+                            referencedColumn: $$ImportBatchesTableReferences
+                                ._accountIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (budgetEntriesRefs)
+                        await $_getPrefetchedData<
+                          ImportBatch,
+                          $ImportBatchesTable,
+                          BudgetEntry
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ImportBatchesTableReferences
+                              ._budgetEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ImportBatchesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).budgetEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.importBatchId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ImportBatchesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ImportBatchesTable,
+      ImportBatch,
+      $$ImportBatchesTableFilterComposer,
+      $$ImportBatchesTableOrderingComposer,
+      $$ImportBatchesTableAnnotationComposer,
+      $$ImportBatchesTableCreateCompanionBuilder,
+      $$ImportBatchesTableUpdateCompanionBuilder,
+      (ImportBatch, $$ImportBatchesTableReferences),
+      ImportBatch,
+      PrefetchHooks Function({
+        bool profileId,
+        bool accountId,
+        bool budgetEntriesRefs,
+      })
+    >;
 typedef $$BudgetEntriesTableCreateCompanionBuilder =
     BudgetEntriesCompanion Function({
       Value<int> id,
@@ -16844,6 +18134,7 @@ typedef $$BudgetEntriesTableCreateCompanionBuilder =
       Value<int?> cardId,
       Value<int?> sourcePaycheckId,
       Value<int?> sourceBillPaymentId,
+      Value<int?> importBatchId,
     });
 typedef $$BudgetEntriesTableUpdateCompanionBuilder =
     BudgetEntriesCompanion Function({
@@ -16859,6 +18150,7 @@ typedef $$BudgetEntriesTableUpdateCompanionBuilder =
       Value<int?> cardId,
       Value<int?> sourcePaycheckId,
       Value<int?> sourceBillPaymentId,
+      Value<int?> importBatchId,
     });
 
 final class $$BudgetEntriesTableReferences
@@ -16950,6 +18242,24 @@ final class $$BudgetEntriesTableReferences
       $_db.billPayments,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_sourceBillPaymentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ImportBatchesTable _importBatchIdTable(_$AppDatabase db) => db
+      .importBatches
+      .createAlias('budget_entries__import_batch_id__import_batches__id');
+
+  $$ImportBatchesTableProcessedTableManager? get importBatchId {
+    final $_column = $_itemColumn<int>('import_batch_id');
+    if ($_column == null) return null;
+    final manager = $$ImportBatchesTableTableManager(
+      $_db,
+      $_db.importBatches,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_importBatchIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -17149,6 +18459,29 @@ class $$BudgetEntriesTableFilterComposer
           }) => $$BillPaymentsTableFilterComposer(
             $db: $db,
             $table: $db.billPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ImportBatchesTableFilterComposer get importBatchId {
+    final $$ImportBatchesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.importBatchId,
+      referencedTable: $db.importBatches,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ImportBatchesTableFilterComposer(
+            $db: $db,
+            $table: $db.importBatches,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -17367,6 +18700,29 @@ class $$BudgetEntriesTableOrderingComposer
     );
     return composer;
   }
+
+  $$ImportBatchesTableOrderingComposer get importBatchId {
+    final $$ImportBatchesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.importBatchId,
+      referencedTable: $db.importBatches,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ImportBatchesTableOrderingComposer(
+            $db: $db,
+            $table: $db.importBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$BudgetEntriesTableAnnotationComposer
@@ -17518,6 +18874,29 @@ class $$BudgetEntriesTableAnnotationComposer
     return composer;
   }
 
+  $$ImportBatchesTableAnnotationComposer get importBatchId {
+    final $$ImportBatchesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.importBatchId,
+      referencedTable: $db.importBatches,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ImportBatchesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.importBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<T> budgetEntryTagsRefs<T extends Object>(
     Expression<T> Function($$BudgetEntryTagsTableAnnotationComposer a) f,
   ) {
@@ -17589,6 +18968,7 @@ class $$BudgetEntriesTableTableManager
             bool cardId,
             bool sourcePaycheckId,
             bool sourceBillPaymentId,
+            bool importBatchId,
             bool budgetEntryTagsRefs,
             bool transactionSplitsRefs,
           })
@@ -17618,6 +18998,7 @@ class $$BudgetEntriesTableTableManager
                 Value<int?> cardId = const Value.absent(),
                 Value<int?> sourcePaycheckId = const Value.absent(),
                 Value<int?> sourceBillPaymentId = const Value.absent(),
+                Value<int?> importBatchId = const Value.absent(),
               }) => BudgetEntriesCompanion(
                 id: id,
                 profileId: profileId,
@@ -17631,6 +19012,7 @@ class $$BudgetEntriesTableTableManager
                 cardId: cardId,
                 sourcePaycheckId: sourcePaycheckId,
                 sourceBillPaymentId: sourceBillPaymentId,
+                importBatchId: importBatchId,
               ),
           createCompanionCallback:
               ({
@@ -17646,6 +19028,7 @@ class $$BudgetEntriesTableTableManager
                 Value<int?> cardId = const Value.absent(),
                 Value<int?> sourcePaycheckId = const Value.absent(),
                 Value<int?> sourceBillPaymentId = const Value.absent(),
+                Value<int?> importBatchId = const Value.absent(),
               }) => BudgetEntriesCompanion.insert(
                 id: id,
                 profileId: profileId,
@@ -17659,6 +19042,7 @@ class $$BudgetEntriesTableTableManager
                 cardId: cardId,
                 sourcePaycheckId: sourcePaycheckId,
                 sourceBillPaymentId: sourceBillPaymentId,
+                importBatchId: importBatchId,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -17675,6 +19059,7 @@ class $$BudgetEntriesTableTableManager
                 cardId = false,
                 sourcePaycheckId = false,
                 sourceBillPaymentId = false,
+                importBatchId = false,
                 budgetEntryTagsRefs = false,
                 transactionSplitsRefs = false,
               }) {
@@ -17755,6 +19140,17 @@ class $$BudgetEntriesTableTableManager
                                 .id,
                           ) as T;
                         }
+                        if (importBatchId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.importBatchId,
+                            referencedTable: $$BudgetEntriesTableReferences
+                                ._importBatchIdTable(db),
+                            referencedColumn: $$BudgetEntriesTableReferences
+                                ._importBatchIdTable(db)
+                                .id,
+                          ) as T;
+                        }
 
                         return state;
                       },
@@ -17828,6 +19224,7 @@ typedef $$BudgetEntriesTableProcessedTableManager =
         bool cardId,
         bool sourcePaycheckId,
         bool sourceBillPaymentId,
+        bool importBatchId,
         bool budgetEntryTagsRefs,
         bool transactionSplitsRefs,
       })
@@ -22880,6 +24277,8 @@ class $AppDatabaseManager {
       $$PaycheckSchedulesTableTableManager(_db, _db.paycheckSchedules);
   $$PaychecksTableTableManager get paychecks =>
       $$PaychecksTableTableManager(_db, _db.paychecks);
+  $$ImportBatchesTableTableManager get importBatches =>
+      $$ImportBatchesTableTableManager(_db, _db.importBatches);
   $$BudgetEntriesTableTableManager get budgetEntries =>
       $$BudgetEntriesTableTableManager(_db, _db.budgetEntries);
   $$BudgetTargetsTableTableManager get budgetTargets =>

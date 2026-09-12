@@ -219,6 +219,29 @@ class CreditScoreSnapshots extends Table {
   IntColumn get hardInquiries => integer().withDefault(const Constant(0))();
 }
 
+/// One CSV import run, so its entries can all be undone together without
+/// hunting for them individually.
+@DataClassName('ImportBatch')
+class ImportBatches extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get profileId => integer().references(Profiles, #id)();
+  TextColumn get sourceFilename => text()();
+  DateTimeColumn get importedAt => dateTime()();
+  IntColumn get rowCount => integer()();
+
+  /// The account these transactions were imported into. Not a foreign key
+  /// with cascade — deleting the account just clears this (see
+  /// deleteAccount), same as every other account link in this schema.
+  IntColumn get accountId => integer().nullable().references(Accounts, #id)();
+
+  /// Net amount applied to [accountId]'s balance when this batch was
+  /// committed, or 0 if the import left the balance alone. Recorded here
+  /// rather than re-derived from the entries, so undo reverses exactly
+  /// what happened even if entries were edited afterward.
+  IntColumn get balanceAdjustmentCents =>
+      integer().withDefault(const Constant(0))();
+}
+
 class BudgetEntries extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get profileId => integer().references(Profiles, #id)();
@@ -249,6 +272,13 @@ class BudgetEntries extends Table {
   IntColumn get sourceBillPaymentId => integer()
       .nullable()
       .references(BillPayments, #id, onDelete: KeyAction.cascade)();
+
+  /// Set when this entry came from a CSV import, so the whole batch can be
+  /// undone together. Imported entries deliberately do not move any
+  /// account or card balance on their own — see [ImportBatches].
+  IntColumn get importBatchId => integer()
+      .nullable()
+      .references(ImportBatches, #id, onDelete: KeyAction.cascade)();
 }
 
 /// One slice of a split transaction — e.g. a single $150 store run entered
@@ -432,13 +462,14 @@ class TransferLogs extends Table {
   RecurringTransfers,
   TransferLogs,
   TransactionSplits,
+  ImportBatches,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -591,6 +622,10 @@ class AppDatabase extends _$AppDatabase {
             if (from >= 10) {
               await m.addColumn(payments, payments.fromAccountId);
             }
+          }
+          if (from < 19) {
+            await m.createTable(importBatches);
+            await m.addColumn(budgetEntries, budgetEntries.importBatchId);
           }
         },
         beforeOpen: (details) async {

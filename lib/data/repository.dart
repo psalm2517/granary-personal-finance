@@ -1,6 +1,8 @@
+import 'package:csv/csv.dart';
 import 'package:drift/drift.dart';
 
 import '../util/streams.dart';
+import 'csv_import.dart';
 import 'database.dart';
 import 'reminder.dart';
 
@@ -230,6 +232,13 @@ class HomebaseRepository {
           ..where((p) =>
               p.profileId.equals(profileId) & p.fromAccountId.equals(id)))
         .write(const PaymentsCompanion(fromAccountId: Value(null)));
+
+    // Same for import batches targeting this account — the imported
+    // entries themselves already lost their own accountId cleanup above.
+    await (_db.update(_db.importBatches)
+          ..where((b) =>
+              b.profileId.equals(profileId) & b.accountId.equals(id)))
+        .write(const ImportBatchesCompanion(accountId: Value(null)));
 
     // Recurring transfers naming this account as either side are removed by
     // the foreign key's cascade — a transfer with only one side left cannot
@@ -2018,5 +2027,151 @@ class HomebaseRepository {
       points.add((date: date, balanceCents: running));
     }
     return points;
+  }
+
+  // ---- CSV import/export ----
+
+  /// A parsed CSV row paired with whether an existing entry for this
+  /// account already looks like the same transaction (same date and
+  /// amount) — the review screen lets you decide row by row whether to
+  /// include it anyway.
+  Future<List<({ParsedImportRow row, bool isDuplicate})>> previewImport({
+    required int profileId,
+    required int accountId,
+    required List<ParsedImportRow> rows,
+  }) async {
+    final existing = await (_db.select(_db.budgetEntries)
+          ..where((e) =>
+              e.profileId.equals(profileId) & e.accountId.equals(accountId)))
+        .get();
+    final existingKeys = {
+      for (final e in existing)
+        '${e.date.year}-${e.date.month}-${e.date.day}:'
+            '${e.type == EntryType.income ? e.amountCents : -e.amountCents}',
+    };
+    return [
+      for (final row in rows)
+        (
+          row: row,
+          isDuplicate: existingKeys.contains(
+              '${row.date.year}-${row.date.month}-${row.date.day}:${row.amountCents}'),
+        ),
+    ];
+  }
+
+  /// Commits reviewed rows as budget entries linked to [accountId], all
+  /// tagged with one new import batch so they can be undone together.
+  /// Imported entries never touch the account's balance on their own —
+  /// only when [updateAccountBalance] is set does the batch's net amount
+  /// get applied once, as a single adjustment rather than one per row.
+  /// Returns the new batch's id.
+  Future<int> commitImport({
+    required int profileId,
+    required int accountId,
+    required String sourceFilename,
+    required List<ParsedImportRow> rows,
+    required bool updateAccountBalance,
+  }) async {
+    final netCents = rows.fold(0, (s, r) => s + r.amountCents);
+    late int batchId;
+    await _db.transaction(() async {
+      batchId = await _db.into(_db.importBatches).insert(
+            ImportBatchesCompanion.insert(
+              profileId: profileId,
+              sourceFilename: sourceFilename,
+              importedAt: DateTime.now(),
+              rowCount: rows.length,
+              accountId: Value(accountId),
+              balanceAdjustmentCents:
+                  Value(updateAccountBalance ? netCents : 0),
+            ),
+          );
+      for (final row in rows) {
+        final category = await categorize(
+                profileId: profileId,
+                description: row.description,
+                amountCents: row.amountCents) ??
+            'Other';
+        await _db.into(_db.budgetEntries).insert(BudgetEntriesCompanion.insert(
+              profileId: profileId,
+              date: row.date,
+              amountCents: row.amountCents.abs(),
+              type: row.amountCents >= 0
+                  ? EntryType.income
+                  : EntryType.expense,
+              category: Value(category),
+              description: Value(row.description),
+              accountId: Value(accountId),
+              importBatchId: Value(batchId),
+            ));
+      }
+      if (updateAccountBalance && netCents != 0) {
+        await _adjustAccountBalance(accountId, netCents);
+      }
+    });
+    return batchId;
+  }
+
+  Stream<List<ImportBatch>> watchImportBatches({required int profileId}) =>
+      (_db.select(_db.importBatches)
+            ..where((b) => b.profileId.equals(profileId))
+            ..orderBy([(b) => OrderingTerm.desc(b.importedAt)]))
+          .watch();
+
+  /// Reverses a batch's balance adjustment (if it made one) and removes
+  /// its entries — the same "undo the effect before deleting the record
+  /// of it" shape as every other undo in this app.
+  Future<void> undoImportBatch(
+      {required int profileId, required int batchId}) async {
+    final batch = await (_db.select(_db.importBatches)
+          ..where((b) => b.profileId.equals(profileId) & b.id.equals(batchId)))
+        .getSingleOrNull();
+    if (batch == null) return;
+    await _db.transaction(() async {
+      if (batch.accountId != null && batch.balanceAdjustmentCents != 0) {
+        await _adjustAccountBalance(
+            batch.accountId!, -batch.balanceAdjustmentCents);
+      }
+      // Cascades to the batch's budget entries (and their splits/tags).
+      await (_db.delete(_db.importBatches)..where((b) => b.id.equals(batchId)))
+          .go();
+    });
+    if (batch.accountId != null) {
+      await recordNetWorthSnapshot(profileId: profileId);
+    }
+  }
+
+  /// A CSV of every entry for a profile, newest first — description,
+  /// category, amount and the account or card it moved through, for
+  /// taking your data elsewhere.
+  Future<String> exportEntriesAsCsv({required int profileId}) async {
+    final entries = await (_db.select(_db.budgetEntries)
+          ..where((e) => e.profileId.equals(profileId))
+          ..orderBy([(e) => OrderingTerm.desc(e.date)]))
+        .get();
+    final accounts = {
+      for (final a in await watchAccounts(profileId: profileId).first) a.id: a.name,
+    };
+    final cards = {
+      for (final c in await watchCards(profileId: profileId).first) c.id: c.name,
+    };
+    final rows = <List<Object?>>[
+      ['Date', 'Description', 'Category', 'Type', 'Amount', 'Account/Card'],
+      for (final e in entries)
+        [
+          '${e.date.year}-${e.date.month.toString().padLeft(2, '0')}-'
+              '${e.date.day.toString().padLeft(2, '0')}',
+          e.description ?? '',
+          e.category,
+          e.type.name,
+          (e.amountCents / 100).toStringAsFixed(2),
+          e.accountId != null
+              ? accounts[e.accountId] ?? ''
+              : e.cardId != null
+                  ? cards[e.cardId] ?? ''
+                  : '',
+        ],
+    ];
+    return const ListToCsvConverter().convert(rows);
   }
 }

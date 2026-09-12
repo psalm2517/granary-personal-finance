@@ -1,10 +1,15 @@
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/csv_import.dart';
 import '../data/database.dart';
 import '../main.dart';
 import '../util/money.dart';
 import '../widgets/common.dart';
+import 'import_csv.dart';
 
 /// A full, searchable ledger across every month — the Budget screen only
 /// ever shows one month at a time, so finding an older transaction meant
@@ -30,6 +35,35 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FloatingActionButton.extended(
+              heroTag: 'exportCsv',
+              onPressed: () => _exportCsv(context, profileId),
+              icon: const Icon(Icons.file_download_outlined),
+              label: const Text('Export'),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FloatingActionButton.extended(
+              heroTag: 'importHistory',
+              onPressed: () => _showImportHistory(context, profileId),
+              icon: const Icon(Icons.history),
+              label: const Text('Imports'),
+            ),
+          ),
+          FloatingActionButton.extended(
+            heroTag: 'importCsv',
+            onPressed: () => _importCsv(context),
+            icon: const Icon(Icons.file_upload_outlined),
+            label: const Text('Import CSV'),
+          ),
+        ],
+      ),
       body: StreamBuilder<List<dynamic>>(
         stream: combineLatest<dynamic>([
           repo.watchAllEntries(profileId: profileId),
@@ -214,5 +248,112 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[d.month - 1]} ${ordinalDay(d.day)}, ${d.year}';
+  }
+
+  Future<void> _importCsv(BuildContext context) async {
+    final file = await openFile(acceptedTypeGroups: const [
+      XTypeGroup(label: 'CSV', extensions: ['csv']),
+    ]);
+    if (file == null) return;
+
+    late final String text;
+    late final ({List<String> headers, List<List<dynamic>> rows}) table;
+    try {
+      text = await file.readAsString();
+      table = readCsvTable(text);
+    } on CsvParseException catch (e) {
+      if (context.mounted) warnNotSaved(context, e.message);
+      return;
+    } catch (e) {
+      if (context.mounted) warnNotSaved(context, 'that file could not be read: $e');
+      return;
+    }
+    if (!context.mounted) return;
+
+    final imported = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ImportCsvScreen(
+          sourceFilename: file.name,
+          headers: table.headers,
+          rawRows: table.rows,
+        ),
+      ),
+    );
+    if (imported == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Import complete')));
+    }
+  }
+
+  Future<void> _exportCsv(BuildContext context, int profileId) async {
+    final repo = ref.read(repositoryProvider);
+    final stamp = DateTime.now().toIso8601String().split('T').first;
+    final location = await getSaveLocation(
+      suggestedName: 'granary-transactions-$stamp.csv',
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'CSV', extensions: ['csv']),
+      ],
+    );
+    if (location == null) return;
+
+    final csv = await repo.exportEntriesAsCsv(profileId: profileId);
+    await File(location.path).writeAsString(csv);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Exported to ${location.path}')));
+    }
+  }
+
+  Future<void> _showImportHistory(BuildContext context, int profileId) async {
+    final repo = ref.read(repositoryProvider);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import history'),
+        content: SizedBox(
+          width: 420,
+          child: StreamBuilder<List<ImportBatch>>(
+            stream: repo.watchImportBatches(profileId: profileId),
+            builder: (context, snap) {
+              final batches = snap.data ?? [];
+              if (batches.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('No imports yet.'),
+                );
+              }
+              return SizedBox(
+                height: 320,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final b in batches)
+                      ListTile(
+                        title: Text(b.sourceFilename),
+                        subtitle: Text('${_fmtDate(b.importedAt)} • '
+                            '${b.rowCount} ${b.rowCount == 1 ? 'row' : 'rows'}'
+                            '${b.balanceAdjustmentCents != 0 ? ' • balance updated' : ''}'),
+                        trailing: TextButton(
+                          onPressed: () async {
+                            await repo.undoImportBatch(
+                                profileId: profileId, batchId: b.id);
+                          },
+                          child: const Text('Undo'),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close')),
+        ],
+      ),
+    );
   }
 }

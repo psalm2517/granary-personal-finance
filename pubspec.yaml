@@ -45,6 +45,7 @@ dependencies:
   file_selector: ^1.1.0
   catppuccin_flutter: ^1.0.0
   shared_preferences: ^2.5.5
+  csv: ^6.0.0
 
 dev_dependencies:
   flutter_test:
