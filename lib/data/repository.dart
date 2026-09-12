@@ -1073,6 +1073,69 @@ class HomebaseRepository {
     return rows;
   }
 
+  /// Deletes several entries at once, reversing each one's balance effect
+  /// the same way [deleteBudgetEntry] does for one — used by the duplicate
+  /// cleanup tool, where a user may remove many at a time.
+  Future<void> deleteBudgetEntries(
+      {required int profileId, required List<int> ids}) async {
+    if (ids.isEmpty) return;
+    final entries = await (_db.select(_db.budgetEntries)
+          ..where((e) => e.profileId.equals(profileId) & e.id.isIn(ids)))
+        .get();
+    var touchedBalance = false;
+    await _db.transaction(() async {
+      await (_db.delete(_db.budgetEntries)
+            ..where((e) => e.profileId.equals(profileId) & e.id.isIn(ids)))
+          .go();
+      for (final entry in entries) {
+        final isExpense = entry.type == EntryType.expense;
+        if (entry.accountId != null) {
+          await _adjustAccountBalance(entry.accountId!,
+              isExpense ? entry.amountCents : -entry.amountCents);
+          touchedBalance = true;
+        }
+        if (entry.cardId != null) {
+          await _adjustCardBalance(entry.cardId!,
+              isExpense ? -entry.amountCents : entry.amountCents);
+          touchedBalance = true;
+        }
+      }
+    });
+    if (touchedBalance) {
+      await recordNetWorthSnapshot(profileId: profileId);
+    }
+  }
+
+  /// Groups a profile's entries that look like accidental duplicates —
+  /// same day, amount, direction, description and source — so they can be
+  /// reviewed and cleared out. This is a plain grouping, not a claim that
+  /// every group really is a duplicate: two identical $5 coffees on the
+  /// same day are possible, so the caller always shows the entries and
+  /// lets a person decide rather than deleting anything automatically.
+  Stream<List<List<BudgetEntry>>> watchDuplicateGroups(
+      {required int profileId}) {
+    return (_db.select(_db.budgetEntries)
+          ..where((e) => e.profileId.equals(profileId))
+          ..orderBy([(e) => OrderingTerm.asc(e.id)]))
+        .watch()
+        .map((entries) {
+      final groups = <String, List<BudgetEntry>>{};
+      for (final e in entries) {
+        final key = '${e.date.year}-${e.date.month}-${e.date.day}:'
+            '${e.amountCents}:${e.type.name}:'
+            '${(e.description ?? '').trim().toLowerCase()}:'
+            '${e.accountId}:${e.cardId}';
+        groups.putIfAbsent(key, () => []).add(e);
+      }
+      final duplicateGroups = [
+        for (final g in groups.values)
+          if (g.length > 1) g,
+      ];
+      duplicateGroups.sort((a, b) => b.first.date.compareTo(a.first.date));
+      return duplicateGroups;
+    });
+  }
+
   /// Edits an entry in place, correcting any balance effect for the
   /// change — reversing whatever the old amount, type or account/card link
   /// did, then applying whatever the new one does. [entry] only needs to

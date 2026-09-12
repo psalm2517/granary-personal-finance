@@ -10,6 +10,7 @@ import '../theme/accent_provider.dart';
 import '../theme/catppuccin.dart';
 import '../theme/flavor_provider.dart';
 import '../widgets/common.dart';
+import 'duplicates.dart';
 
 final backupServiceProvider = Provider<BackupService>(
     (ref) => BackupService(ref.watch(databaseProvider)));
@@ -211,6 +212,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             padding: EdgeInsets.only(top: 16),
             child: LinearProgressIndicator(),
           ),
+        kSectionGap,
+        const SectionHeader('Data', icon: Icons.storage_outlined),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.content_copy_outlined),
+            title: const Text('Find duplicate transactions'),
+            subtitle: const Text(
+                'Looks for entries that match in day, amount, description '
+                'and account or card — handy after an import.'),
+            trailing: FilledButton.tonal(
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (context) => const DuplicatesScreen())),
+              child: const Text('Review'),
+            ),
+          ),
+        ),
       ],
     );
   }
