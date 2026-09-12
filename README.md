@@ -2,6 +2,8 @@
 
 # Clearly
 
+### See clearly.
+
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Android-lightgrey.svg)](#building)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
@@ -9,9 +11,10 @@
 
 ### [⬇ Download for Linux](https://github.com/psalm2517/clearly-personal-finance/releases/download/v0.3.3/clearly-linux-x64-v0.3.3.tar.gz)
 
-A personal finance tracker for a household, built for the desktop. Everything
-stays on your own machine: there is no account to make, no server, and
-nothing is uploaded anywhere.
+Personal finance shouldn't be complicated, and knowing your financial health
+shouldn't cost you $15 a month. Clearly is a personal finance tracker for a
+household, built for the desktop. Everything stays on your own machine:
+there is no account to make, no server, and nothing is uploaded anywhere.
 
 Built with Flutter and Drift (SQLite). Linux is the primary target;
 Android is planned as a secondary one.
