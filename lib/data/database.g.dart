@@ -383,6 +383,27 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _reconciledBalanceCentsMeta =
+      const VerificationMeta('reconciledBalanceCents');
+  @override
+  late final GeneratedColumn<int> reconciledBalanceCents = GeneratedColumn<int>(
+    'reconciled_balance_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reconciledAtMeta = const VerificationMeta(
+    'reconciledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reconciledAt = GeneratedColumn<DateTime>(
+    'reconciled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -391,6 +412,8 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     institution,
     type,
     balanceCents,
+    reconciledBalanceCents,
+    reconciledAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -441,6 +464,24 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         ),
       );
     }
+    if (data.containsKey('reconciled_balance_cents')) {
+      context.handle(
+        _reconciledBalanceCentsMeta,
+        reconciledBalanceCents.isAcceptableOrUnknown(
+          data['reconciled_balance_cents']!,
+          _reconciledBalanceCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reconciled_at')) {
+      context.handle(
+        _reconciledAtMeta,
+        reconciledAt.isAcceptableOrUnknown(
+          data['reconciled_at']!,
+          _reconciledAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -476,6 +517,14 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         DriftSqlType.int,
         data['${effectivePrefix}balance_cents'],
       )!,
+      reconciledBalanceCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reconciled_balance_cents'],
+      ),
+      reconciledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reconciled_at'],
+      ),
     );
   }
 
@@ -495,6 +544,12 @@ class Account extends DataClass implements Insertable<Account> {
   final String? institution;
   final AccountType type;
   final int balanceCents;
+
+  /// The statement balance this account was last reconciled to, and when —
+  /// null until the first reconciliation. Not touched by day-to-day
+  /// balance edits; only [HomebaseRepository.reconcileAccount] sets it.
+  final int? reconciledBalanceCents;
+  final DateTime? reconciledAt;
   const Account({
     required this.id,
     required this.profileId,
@@ -502,6 +557,8 @@ class Account extends DataClass implements Insertable<Account> {
     this.institution,
     required this.type,
     required this.balanceCents,
+    this.reconciledBalanceCents,
+    this.reconciledAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -516,6 +573,12 @@ class Account extends DataClass implements Insertable<Account> {
       map['type'] = Variable<String>($AccountsTable.$convertertype.toSql(type));
     }
     map['balance_cents'] = Variable<int>(balanceCents);
+    if (!nullToAbsent || reconciledBalanceCents != null) {
+      map['reconciled_balance_cents'] = Variable<int>(reconciledBalanceCents);
+    }
+    if (!nullToAbsent || reconciledAt != null) {
+      map['reconciled_at'] = Variable<DateTime>(reconciledAt);
+    }
     return map;
   }
 
@@ -529,6 +592,12 @@ class Account extends DataClass implements Insertable<Account> {
           : Value(institution),
       type: Value(type),
       balanceCents: Value(balanceCents),
+      reconciledBalanceCents: reconciledBalanceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reconciledBalanceCents),
+      reconciledAt: reconciledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reconciledAt),
     );
   }
 
@@ -546,6 +615,10 @@ class Account extends DataClass implements Insertable<Account> {
         serializer.fromJson<String>(json['type']),
       ),
       balanceCents: serializer.fromJson<int>(json['balanceCents']),
+      reconciledBalanceCents: serializer.fromJson<int?>(
+        json['reconciledBalanceCents'],
+      ),
+      reconciledAt: serializer.fromJson<DateTime?>(json['reconciledAt']),
     );
   }
   @override
@@ -560,6 +633,8 @@ class Account extends DataClass implements Insertable<Account> {
         $AccountsTable.$convertertype.toJson(type),
       ),
       'balanceCents': serializer.toJson<int>(balanceCents),
+      'reconciledBalanceCents': serializer.toJson<int?>(reconciledBalanceCents),
+      'reconciledAt': serializer.toJson<DateTime?>(reconciledAt),
     };
   }
 
@@ -570,6 +645,8 @@ class Account extends DataClass implements Insertable<Account> {
     Value<String?> institution = const Value.absent(),
     AccountType? type,
     int? balanceCents,
+    Value<int?> reconciledBalanceCents = const Value.absent(),
+    Value<DateTime?> reconciledAt = const Value.absent(),
   }) => Account(
     id: id ?? this.id,
     profileId: profileId ?? this.profileId,
@@ -577,6 +654,10 @@ class Account extends DataClass implements Insertable<Account> {
     institution: institution.present ? institution.value : this.institution,
     type: type ?? this.type,
     balanceCents: balanceCents ?? this.balanceCents,
+    reconciledBalanceCents: reconciledBalanceCents.present
+        ? reconciledBalanceCents.value
+        : this.reconciledBalanceCents,
+    reconciledAt: reconciledAt.present ? reconciledAt.value : this.reconciledAt,
   );
   Account copyWithCompanion(AccountsCompanion data) {
     return Account(
@@ -590,6 +671,12 @@ class Account extends DataClass implements Insertable<Account> {
       balanceCents: data.balanceCents.present
           ? data.balanceCents.value
           : this.balanceCents,
+      reconciledBalanceCents: data.reconciledBalanceCents.present
+          ? data.reconciledBalanceCents.value
+          : this.reconciledBalanceCents,
+      reconciledAt: data.reconciledAt.present
+          ? data.reconciledAt.value
+          : this.reconciledAt,
     );
   }
 
@@ -601,14 +688,24 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('name: $name, ')
           ..write('institution: $institution, ')
           ..write('type: $type, ')
-          ..write('balanceCents: $balanceCents')
+          ..write('balanceCents: $balanceCents, ')
+          ..write('reconciledBalanceCents: $reconciledBalanceCents, ')
+          ..write('reconciledAt: $reconciledAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, profileId, name, institution, type, balanceCents);
+  int get hashCode => Object.hash(
+    id,
+    profileId,
+    name,
+    institution,
+    type,
+    balanceCents,
+    reconciledBalanceCents,
+    reconciledAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -618,7 +715,9 @@ class Account extends DataClass implements Insertable<Account> {
           other.name == this.name &&
           other.institution == this.institution &&
           other.type == this.type &&
-          other.balanceCents == this.balanceCents);
+          other.balanceCents == this.balanceCents &&
+          other.reconciledBalanceCents == this.reconciledBalanceCents &&
+          other.reconciledAt == this.reconciledAt);
 }
 
 class AccountsCompanion extends UpdateCompanion<Account> {
@@ -628,6 +727,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<String?> institution;
   final Value<AccountType> type;
   final Value<int> balanceCents;
+  final Value<int?> reconciledBalanceCents;
+  final Value<DateTime?> reconciledAt;
   const AccountsCompanion({
     this.id = const Value.absent(),
     this.profileId = const Value.absent(),
@@ -635,6 +736,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.institution = const Value.absent(),
     this.type = const Value.absent(),
     this.balanceCents = const Value.absent(),
+    this.reconciledBalanceCents = const Value.absent(),
+    this.reconciledAt = const Value.absent(),
   });
   AccountsCompanion.insert({
     this.id = const Value.absent(),
@@ -643,6 +746,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.institution = const Value.absent(),
     required AccountType type,
     this.balanceCents = const Value.absent(),
+    this.reconciledBalanceCents = const Value.absent(),
+    this.reconciledAt = const Value.absent(),
   }) : profileId = Value(profileId),
        name = Value(name),
        type = Value(type);
@@ -653,6 +758,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<String>? institution,
     Expression<String>? type,
     Expression<int>? balanceCents,
+    Expression<int>? reconciledBalanceCents,
+    Expression<DateTime>? reconciledAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -661,6 +768,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (institution != null) 'institution': institution,
       if (type != null) 'type': type,
       if (balanceCents != null) 'balance_cents': balanceCents,
+      if (reconciledBalanceCents != null)
+        'reconciled_balance_cents': reconciledBalanceCents,
+      if (reconciledAt != null) 'reconciled_at': reconciledAt,
     });
   }
 
@@ -671,6 +781,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Value<String?>? institution,
     Value<AccountType>? type,
     Value<int>? balanceCents,
+    Value<int?>? reconciledBalanceCents,
+    Value<DateTime?>? reconciledAt,
   }) {
     return AccountsCompanion(
       id: id ?? this.id,
@@ -679,6 +791,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       institution: institution ?? this.institution,
       type: type ?? this.type,
       balanceCents: balanceCents ?? this.balanceCents,
+      reconciledBalanceCents:
+          reconciledBalanceCents ?? this.reconciledBalanceCents,
+      reconciledAt: reconciledAt ?? this.reconciledAt,
     );
   }
 
@@ -705,6 +820,14 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     if (balanceCents.present) {
       map['balance_cents'] = Variable<int>(balanceCents.value);
     }
+    if (reconciledBalanceCents.present) {
+      map['reconciled_balance_cents'] = Variable<int>(
+        reconciledBalanceCents.value,
+      );
+    }
+    if (reconciledAt.present) {
+      map['reconciled_at'] = Variable<DateTime>(reconciledAt.value);
+    }
     return map;
   }
 
@@ -716,7 +839,9 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('name: $name, ')
           ..write('institution: $institution, ')
           ..write('type: $type, ')
-          ..write('balanceCents: $balanceCents')
+          ..write('balanceCents: $balanceCents, ')
+          ..write('reconciledBalanceCents: $reconciledBalanceCents, ')
+          ..write('reconciledAt: $reconciledAt')
           ..write(')'))
         .toString();
   }
@@ -13174,6 +13299,8 @@ typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
   Value<String?> institution,
   required AccountType type,
   Value<int> balanceCents,
+  Value<int?> reconciledBalanceCents,
+  Value<DateTime?> reconciledAt,
 });
 typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
   Value<int> id,
@@ -13182,6 +13309,8 @@ typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
   Value<String?> institution,
   Value<AccountType> type,
   Value<int> balanceCents,
+  Value<int?> reconciledBalanceCents,
+  Value<DateTime?> reconciledAt,
 });
 
 final class $$AccountsTableReferences
@@ -13337,6 +13466,16 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<int> get balanceCents => $composableBuilder(
     column: $table.balanceCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reconciledBalanceCents => $composableBuilder(
+    column: $table.reconciledBalanceCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reconciledAt => $composableBuilder(
+    column: $table.reconciledAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13524,6 +13663,16 @@ class $$AccountsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get reconciledBalanceCents => $composableBuilder(
+    column: $table.reconciledBalanceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reconciledAt => $composableBuilder(
+    column: $table.reconciledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProfilesTableOrderingComposer get profileId {
     final $$ProfilesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -13573,6 +13722,16 @@ class $$AccountsTableAnnotationComposer
 
   GeneratedColumn<int> get balanceCents => $composableBuilder(
     column: $table.balanceCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get reconciledBalanceCents => $composableBuilder(
+    column: $table.reconciledBalanceCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get reconciledAt => $composableBuilder(
+    column: $table.reconciledAt,
     builder: (column) => column,
   );
 
@@ -13768,6 +13927,8 @@ class $$AccountsTableTableManager
                 Value<String?> institution = const Value.absent(),
                 Value<AccountType> type = const Value.absent(),
                 Value<int> balanceCents = const Value.absent(),
+                Value<int?> reconciledBalanceCents = const Value.absent(),
+                Value<DateTime?> reconciledAt = const Value.absent(),
               }) => AccountsCompanion(
                 id: id,
                 profileId: profileId,
@@ -13775,6 +13936,8 @@ class $$AccountsTableTableManager
                 institution: institution,
                 type: type,
                 balanceCents: balanceCents,
+                reconciledBalanceCents: reconciledBalanceCents,
+                reconciledAt: reconciledAt,
               ),
           createCompanionCallback:
               ({
@@ -13784,6 +13947,8 @@ class $$AccountsTableTableManager
                 Value<String?> institution = const Value.absent(),
                 required AccountType type,
                 Value<int> balanceCents = const Value.absent(),
+                Value<int?> reconciledBalanceCents = const Value.absent(),
+                Value<DateTime?> reconciledAt = const Value.absent(),
               }) => AccountsCompanion.insert(
                 id: id,
                 profileId: profileId,
@@ -13791,6 +13956,8 @@ class $$AccountsTableTableManager
                 institution: institution,
                 type: type,
                 balanceCents: balanceCents,
+                reconciledBalanceCents: reconciledBalanceCents,
+                reconciledAt: reconciledAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(

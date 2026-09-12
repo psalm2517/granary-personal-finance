@@ -37,6 +37,15 @@ void main() {
         paid_this_month INTEGER NOT NULL DEFAULT 0);
     ''');
     raw.execute('''
+      CREATE TABLE accounts (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        institution TEXT NULL,
+        type TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0);
+    ''');
+    raw.execute('''
       CREATE TABLE credit_cards (
         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         profile_id INTEGER NOT NULL REFERENCES profiles (id),
@@ -163,6 +172,15 @@ void main() {
         UNIQUE (bill_id, period_start));
     ''');
     raw.execute('''
+      CREATE TABLE accounts (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        institution TEXT NULL,
+        type TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0);
+    ''');
+    raw.execute('''
       CREATE TABLE credit_cards (
         id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
         profile_id INTEGER NOT NULL REFERENCES profiles (id),
@@ -245,6 +263,15 @@ void main() {
         due_month INTEGER NULL,
         due_year INTEGER NULL,
         category TEXT NOT NULL DEFAULT 'Other');
+    ''');
+    raw.execute('''
+      CREATE TABLE accounts (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        institution TEXT NULL,
+        type TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0);
     ''');
     raw.execute('''
       CREATE TABLE paychecks (
@@ -462,6 +489,15 @@ void main() {
         name TEXT NOT NULL,
         pin_hash TEXT NULL,
         is_admin INTEGER NOT NULL DEFAULT 0);
+    """);
+    raw.execute("""
+      CREATE TABLE accounts (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES profiles (id),
+        name TEXT NOT NULL,
+        institution TEXT NULL,
+        type TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0);
     """);
     raw.execute("""
       CREATE TABLE credit_cards (
@@ -683,5 +719,9 @@ void main() {
     expect((await db.select(db.tags).get()).single.name, 'vacation2026');
     expect((await db.select(db.recurringTransfers).get()).single.name,
         'To savings');
+
+    // v20 adds reconciliation columns to accounts, unset until reconciled.
+    expect(account.reconciledBalanceCents, isNull);
+    expect(account.reconciledAt, isNull);
   });
 }

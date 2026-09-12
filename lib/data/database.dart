@@ -22,6 +22,12 @@ class Accounts extends Table {
   TextColumn get institution => text().nullable()();
   TextColumn get type => textEnum<AccountType>()();
   IntColumn get balanceCents => integer().withDefault(const Constant(0))();
+
+  /// The statement balance this account was last reconciled to, and when —
+  /// null until the first reconciliation. Not touched by day-to-day
+  /// balance edits; only [HomebaseRepository.reconcileAccount] sets it.
+  IntColumn get reconciledBalanceCents => integer().nullable()();
+  DateTimeColumn get reconciledAt => dateTime().nullable()();
 }
 
 class Profiles extends Table {
@@ -469,7 +475,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -626,6 +632,15 @@ class AppDatabase extends _$AppDatabase {
           if (from < 19) {
             await m.createTable(importBatches);
             await m.addColumn(budgetEntries, budgetEntries.importBatchId);
+          }
+          if (from < 20) {
+            // Upgraders from before v2 already gained these columns above —
+            // createTable(accounts) there always uses the current (v20)
+            // Dart column set, so adding them again here would collide.
+            if (from >= 2) {
+              await m.addColumn(accounts, accounts.reconciledBalanceCents);
+              await m.addColumn(accounts, accounts.reconciledAt);
+            }
           }
         },
         beforeOpen: (details) async {

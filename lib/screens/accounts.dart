@@ -8,6 +8,7 @@ import '../theme/catppuccin.dart';
 import '../util/money.dart';
 import '../widgets/common.dart';
 import '../widgets/transaction_history.dart';
+import 'reconcile.dart';
 
 IconData accountIcon(AccountType type) => switch (type) {
   AccountType.checking => Icons.account_balance_wallet_outlined,
@@ -363,6 +364,14 @@ class _AccountRow extends ConsumerWidget {
                     onPressed: onEdit,
                     icon: const Icon(Icons.edit_outlined),
                     label: const Text('Edit')),
+                TextButton.icon(
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                ReconcileScreen(accountId: account.id))),
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Reconcile')),
                 TextButton.icon(
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline),

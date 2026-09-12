@@ -111,6 +111,29 @@ void main() {
     expect(refund.amountCents, -1000);
   });
 
+  test('an account\'s history includes a card payment made from it',
+      () async {
+    final checking = await repo.upsertAccount(AccountsCompanion.insert(
+        profileId: profileId, name: 'Checking', type: AccountType.checking));
+    final cardId = await repo.upsertCard(CreditCardsCompanion.insert(
+        profileId: profileId, name: 'Visa', creditLimitCents: 500000));
+    await repo.addPayment(
+        profileId: profileId,
+        accountType: PaymentAccountType.card,
+        accountId: cardId,
+        amountCents: 20000,
+        date: DateTime(2026, 8, 20),
+        fromAccountId: checking);
+
+    final activity = await repo
+        .watchAccountHistory(profileId: profileId, accountId: checking)
+        .first;
+
+    expect(activity.single.label, 'Card payment — Visa');
+    expect(activity.single.amountCents, -20000);
+    expect(activity.single.kind, AccountActivityKind.expense);
+  });
+
   test('an entry with no account or card link never appears in any history',
       () async {
     final accountId = await repo.upsertAccount(AccountsCompanion.insert(

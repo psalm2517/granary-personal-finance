@@ -139,6 +139,25 @@ class HomebaseRepository {
     return account.id;
   }
 
+  /// Records that [accountId] was checked against a real statement and
+  /// matched — just the balance and date, so "last reconciled" can be shown
+  /// without re-deriving it from activity every time. Doesn't touch
+  /// [Accounts.balanceCents] itself; that's already kept live by every
+  /// balance-moving action.
+  Future<void> reconcileAccount({
+    required int profileId,
+    required int accountId,
+    required int statementBalanceCents,
+    required DateTime statementDate,
+  }) async {
+    await (_db.update(_db.accounts)
+          ..where((a) => a.profileId.equals(profileId) & a.id.equals(accountId)))
+        .write(AccountsCompanion(
+      reconciledBalanceCents: Value(statementBalanceCents),
+      reconciledAt: Value(statementDate),
+    ));
+  }
+
   Future<void> _recordAccountSnapshot({
     required int profileId,
     required int accountId,
@@ -1870,10 +1889,25 @@ class HomebaseRepository {
               (_db.recurringTransfers.fromAccountId.equals(accountId) |
                   _db.recurringTransfers.toAccountId.equals(accountId))))
         .watch();
+    // Card/loan payments made from this account move its balance (see
+    // upsertPayment) but never create a budget entry, so without this they
+    // would be invisible here — the same gap that once made the cash flow
+    // chart show guesses instead of the real destinations.
+    final payments = (_db.select(_db.payments)
+          ..where((p) =>
+              p.profileId.equals(profileId) & p.fromAccountId.equals(accountId)))
+        .watch();
+    final cards = watchCards(profileId: profileId);
+    final loans = watchLoans(profileId: profileId);
 
-    return combineLatest<dynamic>([entries, transfers]).map((data) {
+    return combineLatest<dynamic>(
+            [entries, transfers, payments, cards, loans])
+        .map((data) {
       final entryRows = data[0] as List<BudgetEntry>;
       final transferRows = data[1] as List<TypedResult>;
+      final paymentRows = data[2] as List<Payment>;
+      final cardRows = data[3] as List<CreditCard>;
+      final loanRows = data[4] as List<Loan>;
       final activity = <AccountActivity>[
         for (final e in entryRows)
           (
@@ -1899,6 +1933,18 @@ class HomebaseRepository {
                   : AccountActivityKind.transferIn,
             );
           }(),
+        for (final payment in paymentRows)
+          (
+            date: payment.date,
+            label: switch (payment.accountType) {
+              PaymentAccountType.card => 'Card payment — '
+                  '${cardRows.where((c) => c.id == payment.accountId).firstOrNull?.name ?? 'deleted card'}',
+              PaymentAccountType.loan => 'Loan payment — '
+                  '${loanRows.where((l) => l.id == payment.accountId).firstOrNull?.name ?? 'deleted loan'}',
+            },
+            amountCents: -payment.amountCents,
+            kind: AccountActivityKind.expense,
+          ),
       ];
       activity.sort((a, b) => b.date.compareTo(a.date));
       return activity;
