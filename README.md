@@ -150,6 +150,8 @@ SimpleFin Bridge integration
 
 Ollama integration
 
+Eventual Windows and macOS builds
+
 ## AI disclosure
 
 This project was built with AI assistance, directed by me.
